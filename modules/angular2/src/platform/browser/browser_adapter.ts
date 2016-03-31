@@ -53,6 +53,9 @@ var _chromeNumKeyPadMap = {
   '\x90': 'NumLock'
 };
 
+/**
+ * A `DomAdapter` powered by full browser DOM APIs.
+ */
 /* tslint:disable:requireParameterType */
 export class BrowserDomAdapter extends GenericBrowserDomAdapter {
   parse(templateHtml: string) { throw new Error("parse not implemented"); }
@@ -199,14 +202,18 @@ export class BrowserDomAdapter extends GenericBrowserDomAdapter {
     return element.getElementsByTagName(name);
   }
   classList(element): any[] { return <any[]>Array.prototype.slice.call(element.classList, 0); }
-  addClass(element, classname: string) { element.classList.add(classname); }
-  removeClass(element, classname: string) { element.classList.remove(classname); }
-  hasClass(element, classname: string): boolean { return element.classList.contains(classname); }
-  setStyle(element, stylename: string, stylevalue: string) {
-    element.style[stylename] = stylevalue;
+  addClass(element, className: string) { element.classList.add(className); }
+  removeClass(element, className: string) { element.classList.remove(className); }
+  hasClass(element, className: string): boolean { return element.classList.contains(className); }
+  setStyle(element, styleName: string, styleValue: string) {
+    element.style[styleName] = styleValue;
   }
   removeStyle(element, stylename: string) { element.style[stylename] = null; }
   getStyle(element, stylename: string): string { return element.style[stylename]; }
+  hasStyle(element, styleName: string, styleValue: string = null): boolean {
+    var value = this.getStyle(element, styleName) || '';
+    return styleValue ? value == styleValue : value.length > 0;
+  }
   tagName(element): string { return element.tagName; }
   attributeMap(element): Map<string, string> {
     var res = new Map<string, string>();
@@ -218,12 +225,19 @@ export class BrowserDomAdapter extends GenericBrowserDomAdapter {
     return res;
   }
   hasAttribute(element, attribute: string): boolean { return element.hasAttribute(attribute); }
+  hasAttributeNS(element, ns: string, attribute: string): boolean {
+    return element.hasAttributeNS(ns, attribute);
+  }
   getAttribute(element, attribute: string): string { return element.getAttribute(attribute); }
+  getAttributeNS(element, ns: string, name: string): string {
+    return element.getAttributeNS(ns, name);
+  }
   setAttribute(element, name: string, value: string) { element.setAttribute(name, value); }
   setAttributeNS(element, ns: string, name: string, value: string) {
     element.setAttributeNS(ns, name, value);
   }
   removeAttribute(element, attribute: string) { element.removeAttribute(attribute); }
+  removeAttributeNS(element, ns: string, name: string) { element.removeAttributeNS(ns, name); }
   templateAwareRoot(el): any { return this.isTemplateElement(el) ? this.content(el) : el; }
   createHtmlDocument(): HTMLDocument {
     return document.implementation.createHTMLDocument('fakeTitle');

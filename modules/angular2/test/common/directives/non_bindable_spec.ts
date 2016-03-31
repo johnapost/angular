@@ -12,14 +12,14 @@ import {
   xit,
 } from 'angular2/testing_internal';
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
-import {Component, Directive, View} from 'angular2/core';
+import {Component, Directive} from 'angular2/core';
 import {ElementRef} from 'angular2/src/core/linker/element_ref';
 
 export function main() {
   describe('non-bindable', () => {
     it('should not interpolate children',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<div>{{text}}<span ng-non-bindable>{{text}}</span></div>';
+         var template = '<div>{{text}}<span ngNonBindable>{{text}}</span></div>';
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
              .then((fixture) => {
@@ -31,7 +31,7 @@ export function main() {
 
     it('should ignore directives on child nodes',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<div ng-non-bindable><span id=child test-dec>{{text}}</span></div>';
+         var template = '<div ngNonBindable><span id=child test-dec>{{text}}</span></div>';
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
              .then((fixture) => {
@@ -47,7 +47,7 @@ export function main() {
 
     it('should trigger directives on the same node',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<div><span id=child ng-non-bindable test-dec>{{text}}</span></div>';
+         var template = '<div><span id=child ngNonBindable test-dec>{{text}}</span></div>';
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
              .then((fixture) => {
@@ -65,8 +65,7 @@ class TestDirective {
   constructor(el: ElementRef) { DOM.addClass(el.nativeElement, 'compiled'); }
 }
 
-@Component({selector: 'test-cmp'})
-@View({directives: [TestDirective]})
+@Component({selector: 'test-cmp', directives: [TestDirective], template: ''})
 class TestComponent {
   text: string;
   constructor() { this.text = 'foo'; }

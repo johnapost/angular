@@ -1,8 +1,7 @@
-import {bootstrap} from 'angular2/bootstrap';
+import {bootstrap} from 'angular2/platform/browser';
 
 import {App} from './app';
 
-import {APP_VIEW_POOL_CAPACITY} from 'angular2/src/core/linker/view_pool';
 import {bind, provide} from 'angular2/core';
 
 export function main() {
@@ -10,5 +9,5 @@ export function main() {
 }
 
 function createBindings(): any[] {
-  return [provide(APP_VIEW_POOL_CAPACITY, {useValue: 100000})];
+  return [];
 }

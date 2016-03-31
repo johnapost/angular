@@ -2,7 +2,11 @@ library angular.symbol_inspector.symbol_inspector;
 
 import 'dart:mirrors';
 import './simple_library.dart' as simple_library;
-import 'package:angular2/angular2.dart' as angular2;
+import 'package:angular2/common.dart';
+import 'package:angular2/compiler.dart';
+import 'package:angular2/core.dart';
+import 'package:angular2/instrumentation.dart';
+import 'package:angular2/platform/browser.dart';
 
 const IGNORE = const {
   'runtimeType': true,
@@ -15,11 +19,15 @@ const IGNORE = const {
 
 const LIB_MAP = const {
   'simple_library': 'angular2.test.symbol_inspector.simple_library',
-  'ng': 'angular2'
+  'ngCommon': 'angular2.common',
+  'ngCompiler': 'angular2.compiler',
+  'ngCore': 'angular2.core',
+  'ngInstrumentation': 'angular2.instrumentation',
+  'ngPlatformBrowser': 'angular2.platform.browser'
 };
 
 // Have this list here to trick dart to force import.
-var libs = [simple_library.A, angular2.Component];
+var libs = [simple_library.A, Component, Form, TemplateCompiler, NgIf, wtfCreateScope, Title];
 
 List<String> getSymbolsFromLibrary(String name) {
   var libraryName = LIB_MAP[name];
@@ -49,13 +57,11 @@ class ExportedSymbol {
   addTo(List<String> names) {
     var name = unwrapSymbol(symbol);
     if (declaration is MethodMirror) {
-      names.add('$name()');
+      names.add(name);
     } else if (declaration is ClassMirror) {
       var classMirror = declaration as ClassMirror;
       if (classMirror.isAbstract) name = '$name';
       names.add(name);
-      classMirror.staticMembers.forEach(members('$name#', names));
-      classMirror.instanceMembers.forEach(members('$name.', names));
     } else if (declaration is TypedefMirror) {
       names.add(name);
     } else if (declaration is VariableMirror) {
@@ -66,15 +72,6 @@ class ExportedSymbol {
   }
 
   toString() => unwrapSymbol(symbol);
-}
-
-members(String prefix, List<String> names) {
-  return (Symbol symbol, MethodMirror method) {
-    var name = unwrapSymbol(symbol);
-    if (method.isOperator || method.isPrivate || IGNORE[name] == true) return;
-    var suffix = (method.isSetter || method.isGetter) ? '' : '()';
-    names.add('$prefix$name$suffix');
-  };
 }
 
 class LibraryInfo {
@@ -126,19 +123,6 @@ Iterable<Symbol> _getUsedSymbols(
           print("Got error [$e] when visiting $d\n$s");
         }
       });
-    }
-
-    if (decl is MethodMirror) {
-      MethodMirror mdecl = decl;
-      if (mdecl.parameters != null) mdecl.parameters.forEach((p) {
-        used.addAll(_getUsedSymbols(p.type, seenDecls, path, true));
-      });
-      used.addAll(_getUsedSymbols(mdecl.returnType, seenDecls, path, true));
-    }
-
-    if (decl is VariableMirror) {
-      VariableMirror vdecl = decl;
-      used.addAll(_getUsedSymbols(vdecl.type, seenDecls, path, true));
     }
   }
 

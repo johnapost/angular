@@ -10,7 +10,7 @@ import {
   it,
   xit,
   TestComponentBuilder,
-  beforeEachBindings
+  beforeEachProviders
 } from 'angular2/testing_internal';
 import {MapWrapper} from 'angular2/src/facade/collection';
 import {
@@ -39,7 +39,7 @@ import {TEST_PROVIDERS} from './test_bindings';
 
 export function main() {
   describe('ChangeDefinitionFactory', () => {
-    beforeEachBindings(() => TEST_PROVIDERS);
+    beforeEachProviders(() => TEST_PROVIDERS);
 
     var parser: TemplateParser;
     var dispatcher: TestDispatcher;
@@ -47,7 +47,6 @@ export function main() {
     var directive: TestDirective;
     var locals: Locals;
     var pipes: Pipes;
-    var eventLocals: Locals;
 
     beforeEach(inject([TemplateParser], (_templateParser) => {
       parser = _templateParser;
@@ -55,7 +54,6 @@ export function main() {
       directive = new TestDirective();
       dispatcher = new TestDispatcher([directive], []);
       locals = new Locals(null, MapWrapper.createFromStringMap({'someVar': null}));
-      eventLocals = new Locals(null, MapWrapper.createFromStringMap({'$event': null}));
       pipes = new TestPipes();
     }));
 
@@ -65,15 +63,15 @@ export function main() {
           createChangeDetectorDefinitions(new CompileTypeMetadata({name: 'SomeComp'}),
                                           ChangeDetectionStrategy.Default,
                                           new ChangeDetectorGenConfig(true, false, false),
-                                          parser.parse(template, directives, 'TestComp'))
+                                          parser.parse(template, directives, [], 'TestComp'))
               .map(definition => new DynamicProtoChangeDetector(definition));
-      var changeDetector = protoChangeDetectors[protoViewIndex].instantiate(dispatcher);
+      var changeDetector = protoChangeDetectors[protoViewIndex].instantiate();
       changeDetector.hydrate(context, locals, dispatcher, pipes);
       return changeDetector;
     }
 
     it('should watch element properties', () => {
-      var changeDetector = createChangeDetector('<div [el-prop]="someProp">', [], 0);
+      var changeDetector = createChangeDetector('<div [elProp]="someProp">', [], 0);
 
       context.someProp = 'someValue';
       changeDetector.detectChanges();
@@ -91,8 +89,7 @@ export function main() {
     it('should handle events on regular elements', () => {
       var changeDetector = createChangeDetector('<div on-click="onEvent($event)">', [], 0);
 
-      eventLocals.set('$event', 'click');
-      changeDetector.handleEvent('click', 0, eventLocals);
+      changeDetector.handleEvent('click', 0, 'click');
       expect(context.eventLog).toEqual(['click']);
     });
 
@@ -105,21 +102,19 @@ export function main() {
       var changeDetector =
           createChangeDetector('<template on-click="onEvent($event)">', [dirMeta], 0);
 
-      eventLocals.set('$event', 'click');
-      changeDetector.handleEvent('click', 0, eventLocals);
+      changeDetector.handleEvent('click', 0, 'click');
       expect(context.eventLog).toEqual(['click']);
     });
 
     it('should handle events with targets', () => {
       var changeDetector = createChangeDetector('<div (window:click)="onEvent($event)">', [], 0);
 
-      eventLocals.set('$event', 'click');
-      changeDetector.handleEvent('window:click', 0, eventLocals);
+      changeDetector.handleEvent('window:click', 0, 'click');
       expect(context.eventLog).toEqual(['click']);
     });
 
     it('should watch variables', () => {
-      var changeDetector = createChangeDetector('<div #some-var [el-prop]="someVar">', [], 0);
+      var changeDetector = createChangeDetector('<div #someVar [elProp]="someVar">', [], 0);
 
       locals.set('someVar', 'someValue');
       changeDetector.detectChanges();
@@ -129,11 +124,11 @@ export function main() {
     it('should write directive properties', () => {
       var dirMeta = CompileDirectiveMetadata.create({
         type: new CompileTypeMetadata({name: 'SomeDir'}),
-        selector: '[dir-prop]',
+        selector: '[dirProp]',
         inputs: ['dirProp']
       });
 
-      var changeDetector = createChangeDetector('<div [dir-prop]="someProp">', [dirMeta], 0);
+      var changeDetector = createChangeDetector('<div [dirProp]="someProp">', [dirMeta], 0);
 
       context.someProp = 'someValue';
       changeDetector.detectChanges();
@@ -143,11 +138,11 @@ export function main() {
     it('should write template directive properties', () => {
       var dirMeta = CompileDirectiveMetadata.create({
         type: new CompileTypeMetadata({name: 'SomeDir'}),
-        selector: '[dir-prop]',
+        selector: '[dirProp]',
         inputs: ['dirProp']
       });
 
-      var changeDetector = createChangeDetector('<template [dir-prop]="someProp">', [dirMeta], 0);
+      var changeDetector = createChangeDetector('<template [dirProp]="someProp">', [dirMeta], 0);
 
       context.someProp = 'someValue';
       changeDetector.detectChanges();
@@ -177,8 +172,7 @@ export function main() {
 
       var changeDetector = createChangeDetector('<div>', [dirMeta], 0);
 
-      eventLocals.set('$event', 'click');
-      changeDetector.handleEvent('click', 0, eventLocals);
+      changeDetector.handleEvent('click', 0, 'click');
       expect(directive.eventLog).toEqual(['click']);
     });
 

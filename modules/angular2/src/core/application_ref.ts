@@ -1,5 +1,12 @@
-import {NgZone} from 'angular2/src/core/zone/ng_zone';
-import {Type, isBlank, isPresent, assertionsEnabled, print} from 'angular2/src/facade/lang';
+import {NgZone, NgZoneError} from 'angular2/src/core/zone/ng_zone';
+import {
+  Type,
+  isBlank,
+  isPresent,
+  assertionsEnabled,
+  print,
+  IS_DART
+} from 'angular2/src/facade/lang';
 import {provide, Provider, Injector, OpaqueToken} from 'angular2/src/core/di';
 import {
   APP_COMPONENT_REF_PROMISE,
@@ -8,12 +15,7 @@ import {
   PLATFORM_INITIALIZER,
   APP_INITIALIZER
 } from './application_tokens';
-import {
-  Promise,
-  PromiseWrapper,
-  PromiseCompleter,
-  ObservableWrapper
-} from 'angular2/src/facade/async';
+import {PromiseWrapper, PromiseCompleter, ObservableWrapper} from 'angular2/src/facade/async';
 import {ListWrapper} from 'angular2/src/facade/collection';
 import {TestabilityRegistry, Testability} from 'angular2/src/core/testability/testability';
 import {
@@ -26,10 +28,11 @@ import {
   ExceptionHandler,
   unimplemented
 } from 'angular2/src/facade/exceptions';
-import {internalView} from 'angular2/src/core/linker/view_ref';
+import {Console} from 'angular2/src/core/console';
 import {wtfLeave, wtfCreateScope, WtfScopeFn} from './profile/profile';
 import {ChangeDetectorRef} from 'angular2/src/core/change_detection/change_detector_ref';
-import {lockDevMode} from 'angular2/src/facade/lang';
+import {lockMode} from 'angular2/src/facade/lang';
+import {ElementRef_} from 'angular2/src/core/linker/element_ref';
 
 /**
  * Construct providers specific to an individual root component.
@@ -48,10 +51,10 @@ function _componentProviders(appComponentType: Type): Array<Type | Provider | an
                                                          () => { appRef._unloadComponent(ref); })
                     .then((componentRef) => {
                       ref = componentRef;
-                      if (isPresent(componentRef.location.nativeElement)) {
+                      var testability = injector.getOptional(Testability);
+                      if (isPresent(testability)) {
                         injector.get(TestabilityRegistry)
-                            .registerApplication(componentRef.location.nativeElement,
-                                                 injector.get(Testability));
+                            .registerApplication(componentRef.location.nativeElement, testability);
                       }
                       return componentRef;
                     });
@@ -91,7 +94,7 @@ var _platformProviders: any[];
  * provides, Angular will throw an exception.
  */
 export function platform(providers?: Array<Type | Provider | any[]>): PlatformRef {
-  lockDevMode();
+  lockMode();
   if (isPresent(_platform)) {
     if (ListWrapper.equals(_platformProviders, providers)) {
       return _platform;
@@ -125,7 +128,7 @@ function _createPlatform(providers?: Array<Type | Provider | any[]>): PlatformRe
 }
 
 function _runPlatformInitializers(injector: Injector): void {
-  let inits: Function[] = injector.getOptional(PLATFORM_INITIALIZER);
+  let inits: Function[] = <Function[]>injector.getOptional(PLATFORM_INITIALIZER);
   if (isPresent(inits)) inits.forEach(init => init());
 }
 
@@ -147,7 +150,7 @@ export abstract class PlatformRef {
    * Retrieve the platform {@link Injector}, which is the parent injector for
    * every Angular application on the page and provides singleton providers.
    */
-  get injector(): Injector { return unimplemented(); };
+  get injector(): Injector { throw unimplemented(); };
 
   /**
    * Instantiate a new Angular application on the page.
@@ -166,13 +169,8 @@ export abstract class PlatformRef {
    * typical providers, as shown in the example below.
    *
    * ### Example
-   * ```
-   * var myAppProviders = [MyAppService];
    *
-   * platform()
-   *   .application([myAppProviders])
-   *   .bootstrap(MyTopLevelComponent);
-   * ```
+   * {@example core/ts/platform/platform.ts region='longform'}
    * ### See Also
    *
    * See the {@link bootstrap} documentation for more details.
@@ -191,8 +189,8 @@ export abstract class PlatformRef {
    * new application. Once this promise resolves, the application will be
    * constructed in the same manner as a normal `application()`.
    */
-  abstract asyncApplication(bindingFn: (zone: NgZone) =>
-                                Promise<Array<Type | Provider | any[]>>): Promise<ApplicationRef>;
+  abstract asyncApplication(bindingFn: (zone: NgZone) => Promise<Array<Type | Provider | any[]>>,
+                            providers?: Array<Type | Provider | any[]>): Promise<ApplicationRef>;
 
   /**
    * Destroy the Angular platform and all Angular applications on the page.
@@ -214,22 +212,36 @@ export class PlatformRef_ extends PlatformRef {
 
   application(providers: Array<Type | Provider | any[]>): ApplicationRef {
     var app = this._initApp(createNgZone(), providers);
-    return app;
+    if (PromiseWrapper.isPromise(app)) {
+      throw new BaseException(
+          "Cannot use asyncronous app initializers with application. Use asyncApplication instead.");
+    }
+    return <ApplicationRef>app;
   }
 
-  asyncApplication(bindingFn: (zone: NgZone) => Promise<Array<Type | Provider | any[]>>):
-      Promise<ApplicationRef> {
+  asyncApplication(bindingFn: (zone: NgZone) => Promise<Array<Type | Provider | any[]>>,
+                   additionalProviders?: Array<Type | Provider | any[]>): Promise<ApplicationRef> {
     var zone = createNgZone();
-    var completer = PromiseWrapper.completer();
-    zone.run(() => {
-      PromiseWrapper.then(bindingFn(zone), (providers: Array<Type | Provider | any[]>) => {
-        completer.resolve(this._initApp(zone, providers));
+    var completer = PromiseWrapper.completer<ApplicationRef>();
+    if (bindingFn === null) {
+      completer.resolve(this._initApp(zone, additionalProviders));
+    } else {
+      zone.run(() => {
+        PromiseWrapper.then(bindingFn(zone), (providers: Array<Type | Provider | any[]>) => {
+          if (isPresent(additionalProviders)) {
+            providers = ListWrapper.concat(providers, additionalProviders);
+          }
+          let promise = this._initApp(zone, providers);
+          completer.resolve(promise);
+        });
       });
-    });
+    }
     return completer.promise;
   }
 
-  private _initApp(zone: NgZone, providers: Array<Type | Provider | any[]>): ApplicationRef {
+  private _initApp(zone: NgZone,
+                   providers: Array<Type | Provider | any[]>): Promise<ApplicationRef>|
+      ApplicationRef {
     var injector: Injector;
     var app: ApplicationRef;
     zone.run(() => {
@@ -238,11 +250,13 @@ export class PlatformRef_ extends PlatformRef {
         provide(ApplicationRef, {useFactory: (): ApplicationRef => app, deps: []})
       ]);
 
-      var exceptionHandler;
+      var exceptionHandler: Function;
       try {
         injector = this.injector.resolveAndCreateChild(providers);
         exceptionHandler = injector.get(ExceptionHandler);
-        zone.overrideOnErrorHandler((e, s) => exceptionHandler.call(e, s));
+        ObservableWrapper.subscribe(zone.onError, (error: NgZoneError) => {
+          exceptionHandler.call(error.error, error.stackTrace);
+        });
       } catch (e) {
         if (isPresent(exceptionHandler)) {
           exceptionHandler.call(e, e.stack);
@@ -253,8 +267,12 @@ export class PlatformRef_ extends PlatformRef {
     });
     app = new ApplicationRef_(this, zone, injector);
     this._applications.push(app);
-    _runAppInitializers(injector);
-    return app;
+    var promise = _runAppInitializers(injector);
+    if (promise !== null) {
+      return PromiseWrapper.then(promise, (_) => app);
+    } else {
+      return app;
+    }
   }
 
   dispose(): void {
@@ -267,9 +285,22 @@ export class PlatformRef_ extends PlatformRef {
   _applicationDisposed(app: ApplicationRef): void { ListWrapper.remove(this._applications, app); }
 }
 
-function _runAppInitializers(injector: Injector): void {
+function _runAppInitializers(injector: Injector): Promise<any> {
   let inits: Function[] = injector.getOptional(APP_INITIALIZER);
-  if (isPresent(inits)) inits.forEach(init => init());
+  let promises: Promise<any>[] = [];
+  if (isPresent(inits)) {
+    inits.forEach(init => {
+      var retVal = init();
+      if (PromiseWrapper.isPromise(retVal)) {
+        promises.push(retVal);
+      }
+    });
+  }
+  if (promises.length > 0) {
+    return PromiseWrapper.all(promises);
+  } else {
+    return null;
+  }
 }
 
 /**
@@ -305,11 +336,7 @@ export abstract class ApplicationRef {
    * child components under it.
    *
    * ### Example
-   * ```
-   * var app = platform.application([appProviders];
-   * app.bootstrap(FirstRootComponent);
-   * app.bootstrap(SecondRootComponent, [provide(OverrideBinding, {useClass: OverriddenBinding})]);
-   * ```
+   * {@example core/ts/platform/platform.ts region='longform'}
    */
   abstract bootstrap(componentType: Type,
                      providers?: Array<Type | Provider | any[]>): Promise<ComponentRef>;
@@ -317,12 +344,12 @@ export abstract class ApplicationRef {
   /**
    * Retrieve the application {@link Injector}.
    */
-  get injector(): Injector { return unimplemented(); };
+  get injector(): Injector { return <Injector>unimplemented(); };
 
   /**
    * Retrieve the application {@link NgZone}.
    */
-  get zone(): NgZone { return unimplemented(); };
+  get zone(): NgZone { return <NgZone>unimplemented(); };
 
   /**
    * Dispose of this application and all of its components.
@@ -344,7 +371,7 @@ export abstract class ApplicationRef {
   /**
    * Get a list of component types registered to this application.
    */
-  get componentTypes(): Type[] { return unimplemented(); };
+  get componentTypes(): Type[] { return <Type[]>unimplemented(); };
 }
 
 export class ApplicationRef_ extends ApplicationRef {
@@ -369,7 +396,7 @@ export class ApplicationRef_ extends ApplicationRef {
   constructor(private _platform: PlatformRef_, private _zone: NgZone, private _injector: Injector) {
     super();
     if (isPresent(this._zone)) {
-      ObservableWrapper.subscribe(this._zone.onTurnDone,
+      ObservableWrapper.subscribe(this._zone.onMicrotaskEmpty,
                                   (_) => { this._zone.run(() => { this.tick(); }); });
     }
     this._enforceNoNewChanges = assertionsEnabled();
@@ -402,40 +429,50 @@ export class ApplicationRef_ extends ApplicationRef {
       try {
         var injector: Injector = this._injector.resolveAndCreateChild(componentProviders);
         var compRefToken: Promise<ComponentRef> = injector.get(APP_COMPONENT_REF_PROMISE);
-        var tick = (componentRef) => {
+        var tick = (componentRef: ComponentRef) => {
           this._loadComponent(componentRef);
           completer.resolve(componentRef);
         };
 
         var tickResult = PromiseWrapper.then(compRefToken, tick);
 
-        PromiseWrapper.then(tickResult, (_) => {});
-        PromiseWrapper.then(tickResult, null,
-                            (err, stackTrace) => completer.reject(err, stackTrace));
+        PromiseWrapper.then(tickResult, null, (err, stackTrace) => {
+          completer.reject(err, stackTrace);
+          exceptionHandler.call(err, stackTrace);
+        });
       } catch (e) {
         exceptionHandler.call(e, e.stack);
         completer.reject(e, e.stack);
       }
     });
-    return completer.promise;
+    return completer.promise.then<ComponentRef>((ref: ComponentRef) => {
+      let c = this._injector.get(Console);
+      if (assertionsEnabled()) {
+        c.log(
+            "Angular 2 is running in the development mode. Call enableProdMode() to enable the production mode.");
+      }
+      return ref;
+    });
   }
 
   /** @internal */
-  _loadComponent(ref): void {
-    var appChangeDetector = internalView(ref.hostView).changeDetector;
+  _loadComponent(componentRef: ComponentRef): void {
+    var appChangeDetector =
+        (<ElementRef_>componentRef.location).internalElement.parentView.changeDetector;
     this._changeDetectorRefs.push(appChangeDetector.ref);
     this.tick();
-    this._rootComponents.push(ref);
-    this._bootstrapListeners.forEach((listener) => listener(ref));
+    this._rootComponents.push(componentRef);
+    this._bootstrapListeners.forEach((listener) => listener(componentRef));
   }
 
   /** @internal */
-  _unloadComponent(ref): void {
-    if (!ListWrapper.contains(this._rootComponents, ref)) {
+  _unloadComponent(componentRef: ComponentRef): void {
+    if (!ListWrapper.contains(this._rootComponents, componentRef)) {
       return;
     }
-    this.unregisterChangeDetector(internalView(ref.hostView).changeDetector.ref);
-    ListWrapper.remove(this._rootComponents, ref);
+    this.unregisterChangeDetector(
+        (<ElementRef_>componentRef.location).internalElement.parentView.changeDetector.ref);
+    ListWrapper.remove(this._rootComponents, componentRef);
   }
 
   get injector(): Injector { return this._injector; }
@@ -467,5 +504,5 @@ export class ApplicationRef_ extends ApplicationRef {
     this._platform._applicationDisposed(this);
   }
 
-  get componentTypes(): any[] { return this._rootComponentTypes; }
+  get componentTypes(): Type[] { return this._rootComponentTypes; }
 }

@@ -22,6 +22,7 @@ tmp
 *.js.map
 
 # Or type definitions we mirror from github
+# (NB: these lines are removed in publish-build-artifacts.sh)
 **/typings/**/*.d.ts
 **/typings/tsd.cached.json
 
@@ -45,3 +46,6 @@ npm-debug.log
 
 # build-analytics
 .build-analytics
+
+# built dart payload tests
+/modules_dart/payload/**/build

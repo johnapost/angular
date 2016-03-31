@@ -22,6 +22,7 @@ import {
   LiteralPrimitive,
   MethodCall,
   PrefixNot,
+  Quote,
   SafePropertyRead,
   SafeMethodCall
 } from './parser/ast';
@@ -53,19 +54,19 @@ export class DynamicProtoChangeDetector implements ProtoChangeDetector {
     this._directiveIndices = this._definition.directiveRecords.map(d => d.directiveIndex);
   }
 
-  instantiate(dispatcher: any): ChangeDetector {
+  instantiate(): ChangeDetector {
     return new DynamicChangeDetector(
-        this._definition.id, dispatcher, this._propertyBindingRecords.length,
-        this._propertyBindingTargets, this._directiveIndices, this._definition.strategy,
-        this._propertyBindingRecords, this._eventBindingRecords, this._definition.directiveRecords,
-        this._definition.genConfig);
+        this._definition.id, this._propertyBindingRecords.length, this._propertyBindingTargets,
+        this._directiveIndices, this._definition.strategy, this._propertyBindingRecords,
+        this._eventBindingRecords, this._definition.directiveRecords, this._definition.genConfig);
   }
 }
 
 export function createPropertyRecords(definition: ChangeDetectorDefinition): ProtoRecord[] {
   var recordBuilder = new ProtoRecordBuilder();
-  ListWrapper.forEachWithIndex(definition.bindingRecords,
-                               (b, index) => recordBuilder.add(b, definition.variableNames, index));
+  ListWrapper.forEachWithIndex(
+      definition.bindingRecords,
+      (b: BindingRecord, index: number) => recordBuilder.add(b, definition.variableNames, index));
   return coalesce(recordBuilder.records);
 }
 
@@ -289,6 +290,12 @@ class _ConvertAstIntoProtoRecords implements AstVisitor {
   visitChain(ast: Chain): number {
     var args = ast.expressions.map(e => e.visit(this));
     return this._addRecord(RecordType.Chain, "chain", null, args, null, 0);
+  }
+
+  visitQuote(ast: Quote): void {
+    throw new BaseException(
+        `Caught uninterpreted expression at ${ast.location}: ${ast.uninterpretedExpression}. ` +
+        `Expression prefix ${ast.prefix} did not match a template transformer to interpret the expression.`);
   }
 
   private _visitAll(asts: any[]) {

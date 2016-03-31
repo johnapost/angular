@@ -9,7 +9,7 @@ import {
   inject,
   it,
   xit,
-  beforeEachBindings,
+  beforeEachProviders,
   SpyObject,
   stringifyElement
 } from 'angular2/testing_internal';
@@ -99,7 +99,7 @@ export function main() {
           DOM.removeChild(headEl, baseEl);
           DOM.resetBaseElement();
 
-          expect(baseHref).toEqual('/base');
+          expect(baseHref.endsWith('/base')).toBe(true);
         });
       });
     }

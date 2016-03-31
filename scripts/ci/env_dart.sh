@@ -66,6 +66,7 @@ if [[ -z $ENV_SET ]]; then
     fi
   fi
 
+  export DART_SDK_LIB_SEARCH_PATH="$DART_SDK"
   export DART_SDK
   export DARTSDK
   export DART
@@ -85,6 +86,7 @@ if [[ -z $ENV_SET ]]; then
   echo '** ENV **'
   echo '*********'
   echo DART_SDK=$DART_SDK
+  echo DART_SDK_LIB_SEARCH_PATH=$DART_SDK_LIB_SEARCH_PATH
   echo DART=$DART
   echo PUB=$PUB
   echo DARTANALYZER=$DARTANALYZER

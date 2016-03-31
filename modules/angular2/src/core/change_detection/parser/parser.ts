@@ -5,6 +5,7 @@ import {ListWrapper} from 'angular2/src/facade/collection';
 import {
   Lexer,
   EOF,
+  isIdentifier,
   Token,
   $PERIOD,
   $COLON,
@@ -41,18 +42,23 @@ import {
   FunctionCall,
   TemplateBinding,
   ASTWithSource,
-  AstVisitor
+  AstVisitor,
+  Quote
 } from './ast';
 
 
 var _implicitReceiver = new ImplicitReceiver();
 // TODO(tbosch): Cannot make this const/final right now because of the transpiler...
-var INTERPOLATION_REGEXP = /\{\{(.*?)\}\}/g;
+var INTERPOLATION_REGEXP = /\{\{([\s\S]*?)\}\}/g;
 
 class ParseException extends BaseException {
   constructor(message: string, input: string, errLocation: string, ctxLocation?: any) {
     super(`Parser Error: ${message} ${errLocation} [${input}] in ${ctxLocation}`);
   }
+}
+
+export class SplitInterpolation {
+  constructor(public strings: string[], public expressions: string[]) {}
 }
 
 @Injectable()
@@ -73,17 +79,41 @@ export class Parser {
   }
 
   parseBinding(input: string, location: any): ASTWithSource {
-    this._checkNoInterpolation(input, location);
-    var tokens = this._lexer.tokenize(input);
-    var ast = new _ParseAST(input, location, tokens, this._reflector, false).parseChain();
+    var ast = this._parseBindingAst(input, location);
     return new ASTWithSource(ast, input, location);
   }
 
   parseSimpleBinding(input: string, location: string): ASTWithSource {
+    var ast = this._parseBindingAst(input, location);
+    if (!SimpleExpressionChecker.check(ast)) {
+      throw new ParseException(
+          'Host binding expression can only contain field access and constants', input, location);
+    }
+    return new ASTWithSource(ast, input, location);
+  }
+
+  private _parseBindingAst(input: string, location: string): AST {
+    // Quotes expressions use 3rd-party expression language. We don't want to use
+    // our lexer or parser for that, so we check for that ahead of time.
+    var quote = this._parseQuote(input, location);
+
+    if (isPresent(quote)) {
+      return quote;
+    }
+
     this._checkNoInterpolation(input, location);
     var tokens = this._lexer.tokenize(input);
-    var ast = new _ParseAST(input, location, tokens, this._reflector, false).parseSimpleBinding();
-    return new ASTWithSource(ast, input, location);
+    return new _ParseAST(input, location, tokens, this._reflector, false).parseChain();
+  }
+
+  private _parseQuote(input: string, location: any): AST {
+    if (isBlank(input)) return null;
+    var prefixSeparatorIndex = input.indexOf(':');
+    if (prefixSeparatorIndex == -1) return null;
+    var prefix = input.substring(0, prefixSeparatorIndex).trim();
+    if (!isIdentifier(prefix)) return null;
+    var uninterpretedExpression = input.substring(prefixSeparatorIndex + 1);
+    return new Quote(prefix, uninterpretedExpression, location);
   }
 
   parseTemplateBindings(input: string, location: any): TemplateBinding[] {
@@ -92,6 +122,21 @@ export class Parser {
   }
 
   parseInterpolation(input: string, location: any): ASTWithSource {
+    let split = this.splitInterpolation(input, location);
+    if (split == null) return null;
+
+    let expressions = [];
+
+    for (let i = 0; i < split.expressions.length; ++i) {
+      var tokens = this._lexer.tokenize(split.expressions[i]);
+      var ast = new _ParseAST(input, location, tokens, this._reflector, false).parseChain();
+      expressions.push(ast);
+    }
+
+    return new ASTWithSource(new Interpolation(split.strings, expressions), input, location);
+  }
+
+  splitInterpolation(input: string, location: string): SplitInterpolation {
     var parts = StringWrapper.split(input, INTERPOLATION_REGEXP);
     if (parts.length <= 1) {
       return null;
@@ -105,16 +150,14 @@ export class Parser {
         // fixed string
         strings.push(part);
       } else if (part.trim().length > 0) {
-        var tokens = this._lexer.tokenize(part);
-        var ast = new _ParseAST(input, location, tokens, this._reflector, false).parseChain();
-        expressions.push(ast);
+        expressions.push(part);
       } else {
         throw new ParseException('Blank expressions are not allowed in interpolated strings', input,
                                  `at column ${this._findInterpolationErrorColumn(parts, i)} in`,
                                  location);
       }
     }
-    return new ASTWithSource(new Interpolation(strings, expressions), input, location);
+    return new SplitInterpolation(strings, expressions);
   }
 
   wrapLiteralPrimitive(input: string, location: any): ASTWithSource {
@@ -214,14 +257,6 @@ export class _ParseAST {
     }
     this.advance();
     return n.toString();
-  }
-
-  parseSimpleBinding(): AST {
-    var ast = this.parseChain();
-    if (!SimpleExpressionChecker.check(ast)) {
-      this.error(`Simple binding expression can only contain field access and constants'`);
-    }
-    return ast;
   }
 
   parseChain(): AST {
@@ -576,7 +611,7 @@ export class _ParseAST {
         if (prefix == null) {
           prefix = key;
         } else {
-          key = prefix + '-' + key;
+          key = prefix + key[0].toUpperCase() + key.substring(1);
         }
       }
       this.optionalCharacter($COLON);
@@ -664,4 +699,6 @@ class SimpleExpressionChecker implements AstVisitor {
   }
 
   visitChain(ast: Chain) { this.simple = false; }
+
+  visitQuote(ast: Quote) { this.simple = false; }
 }

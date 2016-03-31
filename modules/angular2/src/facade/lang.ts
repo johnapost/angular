@@ -1,3 +1,25 @@
+export interface BrowserNodeGlobal {
+  Object: typeof Object;
+  Array: typeof Array;
+  Map: typeof Map;
+  Set: typeof Set;
+  Date: DateConstructor;
+  RegExp: RegExpConstructor;
+  JSON: typeof JSON;
+  Math: any;  // typeof Math;
+  assert(condition: any): void;
+  Reflect: any;
+  getAngularTestability: Function;
+  getAllAngularTestabilities: Function;
+  getAllAngularRootElements: Function;
+  frameworkStabilizers: Array<Function>;
+  setTimeout: Function;
+  clearTimeout: Function;
+  setInterval: Function;
+  clearInterval: Function;
+  encodeURI: Function;
+}
+
 // TODO(jteplitz602): Load WorkerGlobalScope from lib.webworker.d.ts file #3492
 declare var WorkerGlobalScope;
 var globalScope: BrowserNodeGlobal;
@@ -10,7 +32,11 @@ if (typeof window === 'undefined') {
   }
 } else {
   globalScope = <any>window;
-};
+}
+
+export function scheduleMicroTask(fn: Function) {
+  Zone.current.scheduleMicroTask('scheduleMicrotask', fn);
+}
 
 export const IS_DART = false;
 
@@ -29,40 +55,44 @@ export var Type = Function;
  * the `MyCustomComponent` constructor function.
  */
 export interface Type extends Function {}
+
+/**
+ * Runtime representation of a type that is constructable (non-abstract).
+ */
 export interface ConcreteType extends Type { new (...args): any; }
 
 export function getTypeNameForDebugging(type: Type): string {
-  return type['name'];
+  if (type['name']) {
+    return type['name'];
+  }
+  return typeof type;
 }
 
 
 export var Math = _global.Math;
 export var Date = _global.Date;
 
-var _devMode: boolean = !!_global.angularDevMode;
-var _devModeLocked: boolean = false;
+var _devMode: boolean = true;
+var _modeLocked: boolean = false;
 
-export function lockDevMode() {
-  _devModeLocked = true;
+export function lockMode() {
+  _modeLocked = true;
 }
 
 /**
- * Enable Angular's development mode, which turns on assertions and other
+ * Disable Angular's development mode, which turns off assertions and other
  * checks within the framework.
  *
- * One important assertion this enables verifies that a change detection pass
+ * One important assertion this disables verifies that a change detection pass
  * does not result in additional changes to any bindings (also known as
  * unidirectional data flow).
- *
- * {@example core/ts/dev_mode/dev_mode_example.ts region='enableDevMode'}
  */
-export function enableDevMode() {
-  // TODO(alxhub): Refactor out of facade/lang as per issue #5157.
-  if (_devModeLocked) {
+export function enableProdMode() {
+  if (_modeLocked) {
     // Cannot use BaseException as that ends up importing from facade/lang.
-    throw 'Cannot enable dev mode after platform setup.';
+    throw 'Cannot enable prod mode after platform setup.';
   }
-  _devMode = true;
+  _devMode = false;
 }
 
 export function assertionsEnabled(): boolean {
@@ -126,6 +156,8 @@ export function isDate(obj): boolean {
   return obj instanceof Date && !isNaN(obj.valueOf());
 }
 
+export function noop() {}
+
 export function stringify(token): string {
   if (typeof token === 'string') {
     return token;
@@ -137,6 +169,9 @@ export function stringify(token): string {
 
   if (token.name) {
     return token.name;
+  }
+  if (token.overriddenName) {
+    return token.overriddenName;
   }
 
   var res = token.toString();
@@ -155,6 +190,10 @@ export function deserializeEnum(val, values: Map<number, any>): any {
   return val;
 }
 
+export function resolveEnumToken(enumValue, val): string {
+  return enumValue[val];
+}
+
 export class StringWrapper {
   static fromCharCode(code: number): string { return String.fromCharCode(code); }
 
@@ -163,6 +202,30 @@ export class StringWrapper {
   static split(s: string, regExp: RegExp): string[] { return s.split(regExp); }
 
   static equals(s: string, s2: string): boolean { return s === s2; }
+
+  static stripLeft(s: string, charVal: string): string {
+    if (s && s.length) {
+      var pos = 0;
+      for (var i = 0; i < s.length; i++) {
+        if (s[i] != charVal) break;
+        pos++;
+      }
+      s = s.substring(pos);
+    }
+    return s;
+  }
+
+  static stripRight(s: string, charVal: string): string {
+    if (s && s.length) {
+      var pos = s.length;
+      for (var i = s.length - 1; i >= 0; i--) {
+        if (s[i] != charVal) break;
+        pos--;
+      }
+      s = s.substring(0, pos);
+    }
+    return s;
+  }
 
   static replace(s: string, from: string, replace: string): string {
     return s.replace(from, replace);
@@ -284,6 +347,21 @@ export class RegExpWrapper {
     regExp.lastIndex = 0;
     return {re: regExp, input: input};
   }
+  static replaceAll(regExp: RegExp, input: string, replace: Function): string {
+    let c = regExp.exec(input);
+    let res = '';
+    regExp.lastIndex = 0;
+    let prev = 0;
+    while (c) {
+      res += input.substring(prev, c.index);
+      res += replace(c);
+      prev = c.index + c[0].length;
+      regExp.lastIndex = prev;
+      c = regExp.exec(input);
+    }
+    res += input.substring(prev);
+    return res;
+  }
 }
 
 export class RegExpMatcherWrapper {
@@ -352,7 +430,7 @@ export function setValueOnPath(global: any, path: string, value: any) {
   var obj: any = global;
   while (parts.length > 1) {
     var name = parts.shift();
-    if (obj.hasOwnProperty(name)) {
+    if (obj.hasOwnProperty(name) && isPresent(obj[name])) {
       obj = obj[name];
     } else {
       obj = obj[name] = {};
@@ -384,4 +462,36 @@ export function getSymbolIterator(): string | symbol {
     }
   }
   return _symbolIterator;
+}
+
+export function evalExpression(sourceUrl: string, expr: string, declarations: string,
+                               vars: {[key: string]: any}): any {
+  var fnBody = `${declarations}\nreturn ${expr}\n//# sourceURL=${sourceUrl}`;
+  var fnArgNames = [];
+  var fnArgValues = [];
+  for (var argName in vars) {
+    fnArgNames.push(argName);
+    fnArgValues.push(vars[argName]);
+  }
+  return new Function(...fnArgNames.concat(fnBody))(...fnArgValues);
+}
+
+export function isPrimitive(obj: any): boolean {
+  return !isJsObject(obj);
+}
+
+export function hasConstructor(value: Object, type: Type): boolean {
+  return value.constructor === type;
+}
+
+export function bitWiseOr(values: number[]): number {
+  return values.reduce((a, b) => { return a | b; });
+}
+
+export function bitWiseAnd(values: number[]): number {
+  return values.reduce((a, b) => { return a & b; });
+}
+
+export function escape(s: string): string {
+  return _global.encodeURI(s);
 }

@@ -1,5 +1,5 @@
 /// <reference path="../bitmap.d.ts" /> /// <reference path="../b64.d.ts" />
-import {Injectable} from 'angular2/angular2';
+import {Injectable} from 'angular2/core';
 declare var base64js;
 
 // Temporary fix for Typescript issue #4220 (https://github.com/Microsoft/TypeScript/issues/4220)
@@ -63,7 +63,7 @@ export class BitmapService {
     return imageData;
   }
 
-  private _swap(data: any[], index1: number, index2: number) {
+  private _swap(data: Uint8Array | number[], index1: number, index2: number) {
     var temp = data[index1];
     data[index1] = data[index2];
     data[index2] = temp;

@@ -37,7 +37,7 @@ class Codegen {
 
   /// Generates a change detector class with name `changeDetectorTypeName`,
   /// which must not conflict with other generated classes in the same
-  /// `.ng_deps.dart` file.  The change detector is used to detect changes in
+  /// `.template.dart` file.  The change detector is used to detect changes in
   /// Objects of type `typeName`.
   void generate(String typeName, String changeDetectorTypeName,
       ChangeDetectorDefinition def) {
@@ -124,7 +124,7 @@ class _CodegenState {
     var names = new CodegenNameUtil(
         protoRecords, eventBindings, def.directiveRecords, '$genPrefix$_UTIL');
     var logic = new CodegenLogicUtil(
-        names, '$genPrefix$_UTIL', '$genPrefix$_STATE', def.strategy);
+        names, '$genPrefix$_UTIL', '$genPrefix$_STATE');
     return new _CodegenState._(
         genPrefix,
         def.id,
@@ -145,9 +145,9 @@ class _CodegenState {
       class $_changeDetectorTypeName extends ${_genPrefix}$_BASE_CLASS<$_contextTypeName> {
         ${_genDeclareFields()}
 
-        $_changeDetectorTypeName(dispatcher)
+        $_changeDetectorTypeName()
           : super(${codify(_changeDetectorDefId)},
-              dispatcher, ${_records.length},
+              ${_records.length},
               ${_changeDetectorTypeName}.${_GEN_PROPERTY_BINDING_TARGETS_NAME},
               ${_changeDetectorTypeName}.${_GEN_DIRECTIVE_INDICES_NAME},
               ${_changeDetectionStrategyAsCode}) {
@@ -177,8 +177,8 @@ class _CodegenState {
         ${_genDirectiveIndices()};
 
         static ${_genPrefix}ChangeDetector
-            $CHANGE_DETECTOR_FACTORY_METHOD(a) {
-          return new $_changeDetectorTypeName(a);
+            $CHANGE_DETECTOR_FACTORY_METHOD() {
+          return new $_changeDetectorTypeName();
         }
       }
     ''');
@@ -225,7 +225,7 @@ class _CodegenState {
     List<String> codes = [];
     _endOfBlockIdxs.clear();
 
-    ListWrapper.forEachWithIndex(eb.records, (r, i) {
+    ListWrapper.forEachWithIndex(eb.records, (ProtoRecord _, int i) {
       var code;
       var r = eb.records[i];
 
@@ -253,7 +253,7 @@ class _CodegenState {
       var evalRecord = _logic.genEventBindingEvalValue(eb, r);
       var markPath = _genMarkPathToRootAsCheckOnce(r);
       var prevDefault = _genUpdatePreventDefault(eb, r);
-      return "${evalRecord}\n${markPath}\n${prevDefault}";
+      return "${markPath}\n${evalRecord}\n${prevDefault}";
     } else {
       return _logic.genEventBindingEvalValue(eb, r);
     }
@@ -283,13 +283,19 @@ class _CodegenState {
   String _maybeGenDehydrateDirectives() {
     var destroyPipesParamName = 'destroyPipes';
     var destroyPipesCode = _names.genPipeOnDestroy();
-    if (destroyPipesCode.isNotEmpty) {
-      destroyPipesCode = 'if (${destroyPipesParamName}) {${destroyPipesCode}}';
-    }
     var dehydrateFieldsCode = _names.genDehydrateFields();
-    if (destroyPipesCode.isEmpty && dehydrateFieldsCode.isEmpty) return '';
-    return 'void dehydrateDirectives(${destroyPipesParamName}) '
-        '{ ${destroyPipesCode} ${dehydrateFieldsCode} }';
+    var destroyDirectivesCode =
+        _logic.genDirectivesOnDestroy(this._directiveRecords);
+    if (destroyPipesCode.isEmpty &&
+        dehydrateFieldsCode.isEmpty &&
+        destroyDirectivesCode.isEmpty) return '';
+    return '''void dehydrateDirectives(${destroyPipesParamName}) {
+      if (${destroyPipesParamName}) {
+        ${destroyPipesCode}
+        ${destroyDirectivesCode}
+      }
+      ${dehydrateFieldsCode}
+    }''';
   }
 
   String _maybeGenHydrateDirectives() {
@@ -427,6 +433,7 @@ class _CodegenState {
     var condition = '''!${pipe}.pure || (${contexOrArgCheck.join(" || ")})''';
 
     var check = '''
+      ${_genThrowOnChangeCheck(oldValue, newValue)}
       if (${_genPrefix}$_UTIL.looseNotIdentical($oldValue, $newValue)) {
         $newValue = ${_genPrefix}$_UTIL.unwrapValue($newValue);
         ${_genChangeMarker(r)}
@@ -453,6 +460,7 @@ class _CodegenState {
     ''';
 
     var check = '''
+      ${_genThrowOnChangeCheck(oldValue, newValue)}
       if (${_genPrefix}$_UTIL.looseNotIdentical($newValue, $oldValue)) {
         ${_genChangeMarker(r)}
         ${_genUpdateDirectiveOrElement(r)}
@@ -486,7 +494,6 @@ class _CodegenState {
     if (!r.lastInBinding) return '';
 
     var newValue = _names.getLocalName(r.selfIndex);
-    var oldValue = _names.getFieldName(r.selfIndex);
     var notifyDebug = _genConfig.logBindingUpdate
         ? "this.logBindingUpdate(${newValue});"
         : "";
@@ -496,14 +503,12 @@ class _CodegenState {
       var directiveProperty =
           '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}.${br.target.name}';
       return '''
-      ${_genThrowOnChangeCheck(oldValue, newValue)}
       $directiveProperty = $newValue;
       ${notifyDebug}
       $_IS_CHANGED_LOCAL = true;
     ''';
     } else {
       return '''
-      ${_genThrowOnChangeCheck(oldValue, newValue)}
       this.notifyDispatcher(${newValue});
       ${notifyDebug}
     ''';
@@ -512,7 +517,7 @@ class _CodegenState {
 
   String _genThrowOnChangeCheck(String oldValue, String newValue) {
     return '''
-      if(${_genPrefix}assertionsEnabled() && throwOnChange) {
+      if(${_genPrefix}assertionsEnabled() && throwOnChange && !${_genPrefix}${_UTIL}.devModeEqual(${oldValue}, ${newValue})) {
         this.throwOnChangeError(${oldValue}, ${newValue});
       }
     ''';
@@ -545,20 +550,20 @@ class _CodegenState {
   String _genDoCheck(ProtoRecord r) {
     var br = r.bindingRecord;
     return 'if (!throwOnChange) '
-        '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}.doCheck();';
+        '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}.ngDoCheck();';
   }
 
   String _genOnInit(ProtoRecord r) {
     var br = r.bindingRecord;
     return 'if (!throwOnChange && ${_names.getStateName()} == ${_genPrefix}$_STATE.NeverChecked) '
-        '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}.onInit();';
+        '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}.ngOnInit();';
   }
 
   String _genOnChanges(ProtoRecord r) {
     var br = r.bindingRecord;
     return 'if (!throwOnChange && $_CHANGES_LOCAL != null) '
         '${_names.getDirectiveName(br.directiveRecord.directiveIndex)}'
-        '.onChanges($_CHANGES_LOCAL);';
+        '.ngOnChanges($_CHANGES_LOCAL);';
   }
 
   String _genNotifyOnPushDetectors(ProtoRecord r) {

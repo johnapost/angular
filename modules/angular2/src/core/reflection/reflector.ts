@@ -9,16 +9,24 @@ import {
   StringMapWrapper
 } from 'angular2/src/facade/collection';
 import {SetterFn, GetterFn, MethodFn} from './types';
+import {ReflectorReader} from './reflector_reader';
 import {PlatformReflectionCapabilities} from './platform_reflection_capabilities';
 export {SetterFn, GetterFn, MethodFn} from './types';
 export {PlatformReflectionCapabilities} from './platform_reflection_capabilities';
 
+/**
+ * Reflective information about a symbol, including annotations, interfaces, and other metadata.
+ */
 export class ReflectionInfo {
   constructor(public annotations?: any[], public parameters?: any[][], public factory?: Function,
               public interfaces?: any[], public propMetadata?: {[key: string]: any[]}) {}
 }
 
-export class Reflector {
+/**
+ * Provides access to reflection data about symbols. Used internally by Angular
+ * to power dependency injection and compilation.
+ */
+export class Reflector extends ReflectorReader {
   /** @internal */
   _injectableInfo = new Map<any, ReflectionInfo>();
   /** @internal */
@@ -32,6 +40,7 @@ export class Reflector {
   reflectionCapabilities: PlatformReflectionCapabilities;
 
   constructor(reflectionCapabilities: PlatformReflectionCapabilities) {
+    super();
     this._usedKeys = null;
     this.reflectionCapabilities = reflectionCapabilities;
   }
@@ -80,7 +89,7 @@ export class Reflector {
     }
   }
 
-  parameters(typeOrFunc: /*Type*/ any): any[] {
+  parameters(typeOrFunc: /*Type*/ any): any[][] {
     if (this._injectableInfo.has(typeOrFunc)) {
       var res = this._getReflectionInfo(typeOrFunc).parameters;
       return isPresent(res) ? res : [];
@@ -141,7 +150,7 @@ export class Reflector {
   }
 
   /** @internal */
-  _getReflectionInfo(typeOrFunc) {
+  _getReflectionInfo(typeOrFunc: any): ReflectionInfo {
     if (isPresent(this._usedKeys)) {
       this._usedKeys.add(typeOrFunc);
     }
@@ -149,11 +158,11 @@ export class Reflector {
   }
 
   /** @internal */
-  _containsReflectionInfo(typeOrFunc) { return this._injectableInfo.has(typeOrFunc); }
+  _containsReflectionInfo(typeOrFunc: any) { return this._injectableInfo.has(typeOrFunc); }
 
   importUri(type: Type): string { return this.reflectionCapabilities.importUri(type); }
 }
 
-function _mergeMaps(target: Map<any, any>, config: {[key: string]: Function}): void {
-  StringMapWrapper.forEach(config, (v, k) => target.set(k, v));
+function _mergeMaps(target: Map<string, Function>, config: {[key: string]: Function}): void {
+  StringMapWrapper.forEach(config, (v: Function, k: string) => target.set(k, v));
 }

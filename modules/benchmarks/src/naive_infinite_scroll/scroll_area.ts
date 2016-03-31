@@ -1,7 +1,7 @@
 import {ListWrapper} from 'angular2/src/facade/collection';
 import {Math} from 'angular2/src/facade/math';
 
-import {Component, Directive, View} from 'angular2/angular2';
+import {Component, Directive} from 'angular2/core';
 
 import {
   Offering,
@@ -18,8 +18,6 @@ import {NgFor} from 'angular2/common';
 
 @Component({
   selector: 'scroll-area',
-})
-@View({
   directives: [ScrollItemComponent, NgFor],
   template: `
     <div>
@@ -30,7 +28,7 @@ import {NgFor} from 'angular2/common';
             <div id="padding"></div>
             <div id="inner">
                 <scroll-item
-                    template="ng-for #item of visibleItems"
+                    template="ngFor #item of visibleItems"
                     [offering]="item">
                 </scroll-item>
             </div>

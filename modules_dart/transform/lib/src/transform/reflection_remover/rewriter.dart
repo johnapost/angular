@@ -1,31 +1,43 @@
 library angular2.transform.reflection_remover.rewriter;
 
 import 'package:analyzer/src/generated/ast.dart';
+import 'package:path/path.dart' as path;
+
 import 'package:angular2/src/transform/common/logging.dart';
 import 'package:angular2/src/transform/common/mirror_matcher.dart';
 import 'package:angular2/src/transform/common/mirror_mode.dart';
 import 'package:angular2/src/transform/common/names.dart';
-import 'package:path/path.dart' as path;
 
 import 'codegen.dart';
+import 'entrypoint_matcher.dart';
 
 class Rewriter {
   final String _code;
   final Codegen _codegen;
+  final EntrypointMatcher _entrypointMatcher;
   final MirrorMatcher _mirrorMatcher;
   final MirrorMode _mirrorMode;
   final bool _writeStaticInit;
 
-  Rewriter(this._code, this._codegen,
+  Rewriter(this._code, this._codegen, this._entrypointMatcher,
       {MirrorMatcher mirrorMatcher,
       MirrorMode mirrorMode: MirrorMode.none,
       bool writeStaticInit: true})
       : _mirrorMode = mirrorMode,
         _writeStaticInit = writeStaticInit,
         _mirrorMatcher =
-            mirrorMatcher == null ? const MirrorMatcher() : mirrorMatcher;
+            mirrorMatcher == null ? const MirrorMatcher() : mirrorMatcher {
+    if (_codegen == null) {
+      throw new ArgumentError.notNull('Codegen');
+    }
+    if (_entrypointMatcher == null) {
+      throw new ArgumentError.notNull('EntrypointMatcher');
+    }
+  }
 
-  /// Rewrites the provided code removing imports of the
+  /// Rewrites the provided code to remove dart:mirrors.
+  ///
+  /// Specifically, removes imports of the
   /// {@link ReflectionCapabilities} library and instantiations of
   /// {@link ReflectionCapabilities}, as detected by the (potentially) provided
   /// {@link MirrorMatcher}.
@@ -51,11 +63,15 @@ class Rewriter {
 class _RewriterVisitor extends Object with RecursiveAstVisitor<Object> {
   final Rewriter _rewriter;
   final buf = new StringBuffer();
-  final reflectionCapabilityAssignments = [];
+  final reflectionCapabilityAssignments = <AssignmentExpression>[];
 
   int _currentIndex = 0;
   bool _setupAdded = false;
   bool _importAdded = false;
+
+  /// Whether we imported static bootstrap by e.g. rewriting a non-static
+  /// bootstrap import.
+  bool _hasStaticBootstrapImport = false;
 
   _RewriterVisitor(this._rewriter);
 
@@ -99,10 +115,51 @@ class _RewriterVisitor extends Object with RecursiveAstVisitor<Object> {
 
   @override
   Object visitMethodInvocation(MethodInvocation node) {
-    if (node.methodName.toString() == BOOTSTRAP_NAME) {
+    if (_hasStaticBootstrapImport &&
+        node.methodName.toString() == BOOTSTRAP_NAME) {
       _rewriteBootstrapCallToStatic(node);
     }
     return super.visitMethodInvocation(node);
+  }
+
+  @override
+  Object visitMethodDeclaration(MethodDeclaration node) {
+    if (_rewriter._entrypointMatcher.isEntrypoint(node)) {
+      if (_rewriter._writeStaticInit) {
+        _rewriteEntrypointFunctionBody(node.body);
+      }
+    }
+    return super.visitMethodDeclaration(node);
+  }
+
+  @override
+  Object visitFunctionDeclaration(FunctionDeclaration node) {
+    if (_rewriter._entrypointMatcher.isEntrypoint(node)) {
+      if (_rewriter._writeStaticInit) {
+        _rewriteEntrypointFunctionBody(node.functionExpression.body);
+      }
+    }
+    return super.visitFunctionDeclaration(node);
+  }
+
+  void _rewriteEntrypointFunctionBody(FunctionBody node) {
+    if (node is BlockFunctionBody) {
+      final insertOffset = node.block.leftBracket.end;
+      buf.write(_rewriter._code.substring(_currentIndex, insertOffset));
+      buf.write(_getStaticReflectorInitBlock());
+      _currentIndex = insertOffset;
+      _setupAdded = true;
+    } else if (node is ExpressionFunctionBody) {
+      // TODO(kegluneq): Add support, see issue #5474.
+      throw new ArgumentError(
+          'Arrow syntax is not currently supported as `@AngularEntrypoint`s');
+    } else if (node is NativeFunctionBody) {
+      throw new ArgumentError('Native functions and methods are not supported '
+          'as `@AngularEntrypoint`s');
+    } else if (node is EmptyFunctionBody) {
+      throw new ArgumentError('Empty functions and methods are not supported '
+          'as `@AngularEntrypoint`s');
+    }
   }
 
   String outputRewrittenCode() {
@@ -116,8 +173,48 @@ class _RewriterVisitor extends Object with RecursiveAstVisitor<Object> {
     if (_rewriter._writeStaticInit) {
       // rewrite bootstrap import to its static version.
       buf.write(_rewriter._code.substring(_currentIndex, node.offset));
-      // TODO(yjbanov): handle import "..." show/hide ...
-      buf.write("import '$BOOTSTRAP_STATIC_URI';");
+      buf.write("import '$BOOTSTRAP_STATIC_URI'");
+
+      // The index of the last character we've processed.
+      var lastIdx = node.uri.end;
+
+      // Maintain the import prefix, if present.
+      if (node.prefix != null) {
+        buf.write(_rewriter._code.substring(lastIdx, node.prefix.end));
+        lastIdx = node.prefix.end;
+      }
+
+      // Handle combinators ("show" and "hide" on an "import" directive).
+      // 1. A combinator like "show $BOOTSTRAP_NAME" no longer makes sense, so
+      //    we need to rewrite it.
+      // 2. It's possible we'll need to call the setup method
+      //    (SETUP_METHOD_NAME), so make sure it is visible.
+      if (node.combinators != null) {
+        for (var combinator in node.combinators) {
+          buf.write(_rewriter._code
+              .substring(lastIdx, combinator.end)
+              .replaceAll(BOOTSTRAP_NAME, BOOTSTRAP_STATIC_NAME));
+          lastIdx = combinator.end;
+          if (combinator is ShowCombinator) {
+            buf.write(', $SETUP_METHOD_NAME');
+          } else if (combinator is HideCombinator) {
+            // Ensure the user is not explicitly hiding SETUP_METHOD_NAME.
+            // I don't know why anyone would do this, but it would result in
+            // some confusing behavior, so throw an explicit error.
+            combinator.hiddenNames.forEach((id) {
+              if (id.toString() == SETUP_METHOD_NAME) {
+                throw new FormatException(
+                    'Import statement explicitly hides initialization function '
+                    '$SETUP_METHOD_NAME. Please do not do this: "$node"');
+              }
+            });
+          }
+        }
+      }
+
+      // Write anything after the combinators.
+      buf.write(_rewriter._code.substring(lastIdx, node.end));
+      _hasStaticBootstrapImport = true;
     } else {
       // leave it as is
       buf.write(_rewriter._code.substring(_currentIndex, node.end));
@@ -140,6 +237,10 @@ class _RewriterVisitor extends Object with RecursiveAstVisitor<Object> {
           _setupAdded ? '' : ', () { ${_getStaticReflectorInitBlock()} }';
 
       // rewrite `bootstrap(...)` to `bootstrapStatic(...)`
+      if (node.target != null && node.target is SimpleIdentifier) {
+        // `bootstrap` imported with a prefix, maintain this.
+        buf.write('${node.target}.');
+      }
       buf.write('$BOOTSTRAP_STATIC_NAME(${args[0]}');
       if (numArgs == 1) {
         // bootstrap args are positional, so before we pass reflectorInit code

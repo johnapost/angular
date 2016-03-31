@@ -15,11 +15,13 @@ export {
   WrappedValue,
   SimpleChange,
   PipeTransform,
-  PipeOnDestroy,
   IterableDiffers,
   IterableDiffer,
   IterableDifferFactory,
   KeyValueDiffers,
   KeyValueDiffer,
-  KeyValueDifferFactory
+  KeyValueDifferFactory,
+  CollectionChangeRecord,
+  KeyValueChangeRecord,
+  TrackByFn
 } from './change_detection/change_detection';

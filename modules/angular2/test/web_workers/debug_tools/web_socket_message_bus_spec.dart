@@ -8,8 +8,7 @@ import "package:angular2/testing_internal.dart"
         it,
         expect,
         beforeEach,
-        createTestInjector,
-        beforeEachBindings,
+        beforeEachProviders,
         SpyObject,
         proxy;
 import "package:angular2/src/web_workers/debug_tools/web_socket_message_bus.dart";
@@ -61,15 +60,9 @@ main() {
 @proxy
 class SpyMessageEvent extends SpyObject implements MessageEvent {
   SpyMessageEvent() : super(SpyMessageEvent);
-  noSuchMethod(m) {
-    return super.noSuchMethod(m);
-  }
 }
 
 @proxy
 class SpyWebSocket extends SpyObject implements WebSocket {
   SpyWebSocket() : super(SpyWebSocket);
-  noSuchMethod(m) {
-    return super.noSuchMethod(m);
-  }
 }

@@ -1,4 +1,4 @@
-import {NgIf, NgFor, EventEmitter, Component, View, Inject, Injectable} from 'angular2/angular2';
+import {Component, Injectable} from 'angular2/core';
 import {
   RouterLink,
   RouteConfig,
@@ -9,9 +9,9 @@ import {
   RouteParams
 } from 'angular2/router';
 import * as db from './data';
-import {ObservableWrapper, PromiseWrapper, Promise} from 'angular2/src/facade/async';
-import {ListWrapper} from 'angular2/src/facade/collection';
+import {PromiseWrapper} from 'angular2/src/facade/async';
 import {isPresent, DateWrapper} from 'angular2/src/facade/lang';
+import {PromiseCompleter} from 'angular2/src/facade/promise';
 
 class InboxRecord {
   id: string = '';
@@ -60,37 +60,36 @@ class InboxRecord {
 @Injectable()
 class DbService {
   getData(): Promise<any[]> {
-    var p = PromiseWrapper.completer();
+    var p = new PromiseCompleter<any[]>();
     p.resolve(db.data);
     return p.promise;
   }
 
   drafts(): Promise<any[]> {
-    return PromiseWrapper.then(this.getData(), (data: any[]) => {
-      return data.filter(record => isPresent(record['draft']) && record['draft'] == true);
-    });
+    return this.getData().then(
+        (data: any[]): any[] =>
+            data.filter(record => isPresent(record['draft']) && record['draft'] == true));
   }
 
   emails(): Promise<any[]> {
-    return PromiseWrapper.then(this.getData(), (data: any[]) => {
-      return data.filter(record => !isPresent(record['draft']));
-    });
+    return this.getData().then((data: any[]): any[] =>
+                                   data.filter(record => !isPresent(record['draft'])));
   }
 
   email(id): Promise<any> {
-    return PromiseWrapper.then(this.getData(), (data) => {
+    return PromiseWrapper.then(this.getData(), (data: any[]) => {
       for (var i = 0; i < data.length; i++) {
         var entry = data[i];
         if (entry['id'] == id) {
           return entry;
         }
       }
+      return null;
     });
   }
 }
 
-@Component({selector: 'inbox-detail'})
-@View({templateUrl: "inbox-detail.html", directives: [NgFor, RouterLink]})
+@Component({selector: 'inbox-detail', directives: [RouterLink], templateUrl: 'inbox-detail.html'})
 class InboxDetailCmp {
   record: InboxRecord = new InboxRecord();
   ready: boolean = false;
@@ -101,8 +100,7 @@ class InboxDetailCmp {
   }
 }
 
-@Component({selector: 'inbox'})
-@View({templateUrl: "inbox.html", directives: [NgFor, RouterLink]})
+@Component({selector: 'inbox', templateUrl: 'inbox.html', directives: [RouterLink]})
 class InboxCmp {
   items: InboxRecord[] = [];
   ready: boolean = false;
@@ -111,38 +109,41 @@ class InboxCmp {
     var sortType = params.get('sort');
     var sortEmailsByDate = isPresent(sortType) && sortType == "date";
 
-    PromiseWrapper.then(db.emails(), emails => {
+    PromiseWrapper.then(db.emails(), (emails: any[]) => {
       this.ready = true;
       this.items = emails.map(data => new InboxRecord(data));
 
       if (sortEmailsByDate) {
-        ListWrapper.sort(this.items,
-                         (a, b) => DateWrapper.toMillis(DateWrapper.fromISOString(a.date)) <
-                                           DateWrapper.toMillis(DateWrapper.fromISOString(b.date)) ?
-                                       -1 :
-                                       1);
+        this.items.sort((a: InboxRecord, b: InboxRecord) =>
+                            DateWrapper.toMillis(DateWrapper.fromISOString(a.date)) <
+                                    DateWrapper.toMillis(DateWrapper.fromISOString(b.date)) ?
+                                -1 :
+                                1);
       }
     });
   }
 }
 
 
-@Component({selector: 'drafts'})
-@View({templateUrl: "drafts.html", directives: [NgFor, RouterLink]})
+@Component({selector: 'drafts', templateUrl: 'drafts.html', directives: [RouterLink]})
 class DraftsCmp {
   items: InboxRecord[] = [];
   ready: boolean = false;
 
   constructor(public router: Router, db: DbService) {
-    PromiseWrapper.then(db.drafts(), (drafts) => {
+    PromiseWrapper.then(db.drafts(), (drafts: any[]) => {
       this.ready = true;
       this.items = drafts.map(data => new InboxRecord(data));
     });
   }
 }
 
-@Component({selector: 'inbox-app', viewProviders: [DbService]})
-@View({templateUrl: "inbox-app.html", directives: [RouterOutlet, RouterLink]})
+@Component({
+  selector: 'inbox-app',
+  viewProviders: [DbService],
+  templateUrl: 'inbox-app.html',
+  directives: [RouterOutlet, RouterLink]
+})
 @RouteConfig([
   new Route({path: '/', component: InboxCmp, name: 'Inbox'}),
   new Route({path: '/drafts', component: DraftsCmp, name: 'Drafts'}),

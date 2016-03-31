@@ -1,5 +1,5 @@
-import {bootstrap} from 'angular2/bootstrap';
-import {Component, Directive, View, Host, forwardRef, Provider} from 'angular2/core';
+import {bootstrap} from 'angular2/platform/browser';
+import {Component, Directive, Host, forwardRef, Provider} from 'angular2/core';
 import {
   ControlGroup,
   NgIf,
@@ -42,7 +42,7 @@ function creditCardValidator(c): {[key: string]: boolean} {
 const creditCardValidatorBinding =
     CONST_EXPR(new Provider(NG_VALIDATORS, {useValue: creditCardValidator, multi: true}));
 
-@Directive({selector: '[credit-card]', bindings: [creditCardValidatorBinding]})
+@Directive({selector: '[credit-card]', providers: [creditCardValidatorBinding]})
 class CreditCardValidator {
 }
 
@@ -61,10 +61,11 @@ class CreditCardValidator {
  * actual error message.
  * To make it simple, we are using a simple map here.
  */
-@Component({selector: 'show-error', inputs: ['controlPath: control', 'errorTypes: errors']})
-@View({
+@Component({
+  selector: 'show-error',
+  inputs: ['controlPath: control', 'errorTypes: errors'],
   template: `
-    <span *ng-if="errorMessage !== null">{{errorMessage}}</span>
+    <span *ngIf="errorMessage !== null">{{errorMessage}}</span>
   `,
   directives: [NgIf]
 })
@@ -95,57 +96,57 @@ class ShowError {
 }
 
 
-@Component({selector: 'template-driven-forms'})
-@View({
+@Component({
+  selector: 'template-driven-forms',
   template: `
     <h1>Checkout Form</h1>
 
-    <form (ng-submit)="onSubmit()" #f="form">
+    <form (ngSubmit)="onSubmit()" #f="ngForm">
       <p>
         <label for="firstName">First Name</label>
-        <input type="text" id="firstName" ng-control="firstName" [(ng-model)]="model.firstName" required>
+        <input type="text" id="firstName" ngControl="firstName" [(ngModel)]="model.firstName" required>
         <show-error control="firstName" [errors]="['required']"></show-error>
       </p>
 
       <p>
         <label for="middleName">Middle Name</label>
-        <input type="text" id="middleName" ng-control="middleName" [(ng-model)]="model.middleName">
+        <input type="text" id="middleName" ngControl="middleName" [(ngModel)]="model.middleName">
       </p>
 
       <p>
         <label for="lastName">Last Name</label>
-        <input type="text" id="lastName" ng-control="lastName" [(ng-model)]="model.lastName" required>
+        <input type="text" id="lastName" ngControl="lastName" [(ngModel)]="model.lastName" required>
         <show-error control="lastName" [errors]="['required']"></show-error>
       </p>
 
       <p>
         <label for="country">Country</label>
-        <select id="country" ng-control="country" [(ng-model)]="model.country">
-          <option *ng-for="#c of countries" [value]="c">{{c}}</option>
+        <select id="country" ngControl="country" [(ngModel)]="model.country">
+          <option *ngFor="#c of countries" [value]="c">{{c}}</option>
         </select>
       </p>
 
       <p>
         <label for="creditCard">Credit Card</label>
-        <input type="text" id="creditCard" ng-control="creditCard" [(ng-model)]="model.creditCard" required credit-card>
+        <input type="text" id="creditCard" ngControl="creditCard" [(ngModel)]="model.creditCard" required credit-card>
         <show-error control="creditCard" [errors]="['required', 'invalidCreditCard']"></show-error>
       </p>
 
       <p>
         <label for="amount">Amount</label>
-        <input type="number" id="amount" ng-control="amount" [(ng-model)]="model.amount" required>
+        <input type="number" id="amount" ngControl="amount" [(ngModel)]="model.amount" required>
         <show-error control="amount" [errors]="['required']"></show-error>
       </p>
 
       <p>
         <label for="email">Email</label>
-        <input type="email" id="email" ng-control="email" [(ng-model)]="model.email" required>
+        <input type="email" id="email" ngControl="email" [(ngModel)]="model.email" required>
         <show-error control="email" [errors]="['required']"></show-error>
       </p>
 
       <p>
         <label for="comments">Comments</label>
-        <textarea id="comments" ng-control="comments" [(ng-model)]="model.comments">
+        <textarea id="comments" ngControl="comments" [(ngModel)]="model.comments">
         </textarea>
       </p>
 

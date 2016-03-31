@@ -24,7 +24,6 @@ class TestObj {
 
 class SpyTestObj extends SpyObject {
   constructor() { super(TestObj); }
-  noSuchMethod(m) { return super.noSuchMethod(m) }
 }
 
 
@@ -52,6 +51,14 @@ export function main() {
         var el = DOM.createElement('div');
         DOM.addClass(el, 'matias');
         expect(el).not.toHaveCssClass('fatias');
+      });
+    });
+
+    describe("toMatchPAttern", () => {
+      it("should assert that a string matches a given pattern", () => {
+        expect("matias").toMatchPattern(/ias$/g);
+        expect("tobias").toMatchPattern(/ias$/g);
+        expect("joonas").not.toMatchPattern(/ias$/g);
       });
     });
 

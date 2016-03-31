@@ -1,5 +1,5 @@
-import {bootstrap} from 'angular2/bootstrap';
-import {Component, Directive, DynamicComponentLoader, ElementRef, View} from 'angular2/core';
+import {bootstrap} from 'angular2/platform/browser';
+import {Component, Directive, DynamicComponentLoader, ElementRef} from 'angular2/core';
 import {NgIf, NgFor} from 'angular2/common';
 import {ApplicationRef} from 'angular2/src/core/application_ref';
 import {ListWrapper} from 'angular2/src/facade/collection';
@@ -43,8 +43,7 @@ export function main() {
 }
 
 
-@Component({selector: 'dummy'})
-@View({template: `<div></div>`})
+@Component({selector: 'dummy', template: `<div></div>`})
 class DummyComponent {
 }
 
@@ -59,20 +58,20 @@ class DynamicDummy {
   }
 }
 
-@Component({selector: 'app'})
-@View({
+@Component({
+  selector: 'app',
   directives: [NgIf, NgFor, DummyComponent, DummyDirective, DynamicDummy],
   template: `
-    <div *ng-if="testingPlainComponents">
-      <dummy *ng-for="#i of list"></dummy>
+    <div *ngIf="testingPlainComponents">
+      <dummy *ngFor="#i of list"></dummy>
     </div>
 
-    <div *ng-if="testingWithDirectives">
-      <dummy dummy-decorator *ng-for="#i of list"></dummy>
+    <div *ngIf="testingWithDirectives">
+      <dummy dummy-decorator *ngFor="#i of list"></dummy>
     </div>
 
-    <div *ng-if="testingDynamicComponents">
-      <dynamic-dummy *ng-for="#i of list"></dynamic-dummy>
+    <div *ngIf="testingDynamicComponents">
+      <dynamic-dummy *ngFor="#i of list"></dynamic-dummy>
     </div>
   `
 })

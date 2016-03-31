@@ -12,7 +12,6 @@ import {BaseException, WrappedException} from 'angular2/src/facade/exceptions';
 
 import {WebDriverExtension, PerfLogFeatures} from '../web_driver_extension';
 import {WebDriverAdapter} from '../web_driver_adapter';
-import {Promise} from 'angular2/src/facade/async';
 import {Options} from '../common_options';
 
 /**
@@ -103,7 +102,7 @@ export class ChromeDriverExtension extends WebDriverExtension {
         //   2nd choice: BenchmarkInstrumentation::DisplayRenderingStats - available on systems with
         //               new surfaces framework (not broadly enabled yet)
         //   3rd choice: BenchmarkInstrumentation::ImplThreadRenderingStats - fallback event that is
-        //               allways available if something is rendered
+        //               always available if something is rendered
         var frameCount = event['args']['data']['frame_count'];
         if (frameCount > 1) {
           throw new BaseException('multi-frame render stats not supported');
@@ -193,6 +192,15 @@ export class ChromeDriverExtension extends WebDriverExtension {
                this._isEvent(categories, name, ['devtools.timeline'], 'Layout') ||
                this._isEvent(categories, name, ['devtools.timeline'], 'Paint')) {
       return normalizeEvent(event, {'name': 'render'});
+    } else if (this._isEvent(categories, name, ['devtools.timeline'], 'ResourceReceivedData')) {
+      let normArgs = {'encodedDataLength': args['data']['encodedDataLength']};
+      return normalizeEvent(event, {'name': 'receivedData', 'args': normArgs});
+    } else if (this._isEvent(categories, name, ['devtools.timeline'], 'ResourceSendRequest')) {
+      let data = args['data'];
+      let normArgs = {'url': data['url'], 'method': data['requestMethod']};
+      return normalizeEvent(event, {'name': 'sendRequest', 'args': normArgs});
+    } else if (this._isEvent(categories, name, ['blink.user_timing'], 'navigationStart')) {
+      return normalizeEvent(event, {'name': name});
     }
     return null;  // nothing useful in this event
   }
@@ -208,7 +216,7 @@ export class ChromeDriverExtension extends WebDriverExtension {
   }
 
   perfLogFeatures(): PerfLogFeatures {
-    return new PerfLogFeatures({render: true, gc: true, frameCapture: true});
+    return new PerfLogFeatures({render: true, gc: true, frameCapture: true, userTiming: true});
   }
 
   supports(capabilities: {[key: string]: any}): boolean {

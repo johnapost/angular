@@ -17,11 +17,12 @@ import {
   SpyObject
 } from 'angular2/testing_internal';
 
+import {By} from 'angular2/platform/common_dom';
 import {NumberWrapper} from 'angular2/src/facade/lang';
 import {PromiseWrapper} from 'angular2/src/facade/async';
 import {ListWrapper} from 'angular2/src/facade/collection';
 
-import {provide, Component, View, DirectiveResolver} from 'angular2/core';
+import {provide, Component, DirectiveResolver} from 'angular2/core';
 
 import {SpyLocation} from 'angular2/src/mock/location_mock';
 import {
@@ -35,49 +36,48 @@ import {
   Route,
   RouteParams,
   RouteConfig,
-  ROUTER_DIRECTIVES
+  ROUTER_DIRECTIVES,
+  ROUTER_PRIMARY_COMPONENT
 } from 'angular2/router';
 import {RootRouter} from 'angular2/src/router/router';
 
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
+import {TEMPLATE_TRANSFORMS} from 'angular2/compiler';
+import {RouterLinkTransform} from 'angular2/src/router/directives/router_link_transform';
 
 export function main() {
-  describe('router-link directive', function() {
+  describe('routerLink directive', function() {
     var tcb: TestComponentBuilder;
     var fixture: ComponentFixture;
-    var router, location;
+    var router: Router;
+    var location: Location;
 
     beforeEachProviders(() => [
       RouteRegistry,
       DirectiveResolver,
       provide(Location, {useClass: SpyLocation}),
-      provide(Router,
-              {
-                useFactory:
-                    (registry, location) => { return new RootRouter(registry, location, MyComp); },
-                deps: [RouteRegistry, Location]
-              })
+      provide(ROUTER_PRIMARY_COMPONENT, {useValue: MyComp}),
+      provide(Router, {useClass: RootRouter}),
+      provide(TEMPLATE_TRANSFORMS, {useClass: RouterLinkTransform, multi: true})
     ]);
 
-    beforeEach(inject([TestComponentBuilder, Router, Location], (tcBuilder, rtr, loc) => {
-      tcb = tcBuilder;
-      router = rtr;
-      location = loc;
-    }));
+    beforeEach(inject([TestComponentBuilder, Router, Location],
+                      (tcBuilder, rtr: Router, loc: Location) => {
+                        tcb = tcBuilder;
+                        router = rtr;
+                        location = loc;
+                      }));
 
     function compile(template: string = "<router-outlet></router-outlet>") {
-      return tcb.overrideView(MyComp, new View({
-                                template: ('<div>' + template + '</div>'),
-                                directives: [RouterOutlet, RouterLink]
-                              }))
+      return tcb.overrideTemplate(MyComp, ('<div>' + template + '</div>'))
           .createAsync(MyComp)
           .then((tc) => { fixture = tc; });
     }
 
     it('should generate absolute hrefs that include the base href',
        inject([AsyncTestCompleter], (async) => {
-         location.setBaseHref('/my/base');
-         compile('<a href="hello" [router-link]="[\'./User\']"></a>')
+         (<SpyLocation>location).setBaseHref('/my/base');
+         compile('<a href="hello" [routerLink]="[\'./User\']"></a>')
              .then((_) => router.config(
                        [new Route({path: '/user', component: UserCmp, name: 'User'})]))
              .then((_) => router.navigateByUrl('/a/b'))
@@ -90,7 +90,7 @@ export function main() {
 
 
     it('should generate link hrefs without params', inject([AsyncTestCompleter], (async) => {
-         compile('<a href="hello" [router-link]="[\'./User\']"></a>')
+         compile('<a href="hello" [routerLink]="[\'./User\']"></a>')
              .then((_) => router.config(
                        [new Route({path: '/user', component: UserCmp, name: 'User'})]))
              .then((_) => router.navigateByUrl('/a/b'))
@@ -103,7 +103,7 @@ export function main() {
 
 
     it('should generate link hrefs with params', inject([AsyncTestCompleter], (async) => {
-         compile('<a href="hello" [router-link]="[\'./User\', {name: name}]">{{name}}</a>')
+         compile('<a href="hello" [routerLink]="[\'./User\', {name: name}]">{{name}}</a>')
              .then((_) => router.config(
                        [new Route({path: '/user/:name', component: UserCmp, name: 'User'})]))
              .then((_) => router.navigateByUrl('/a/b'))
@@ -111,9 +111,7 @@ export function main() {
                fixture.debugElement.componentInstance.name = 'brian';
                fixture.detectChanges();
                expect(fixture.debugElement.nativeElement).toHaveText('brian');
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[0].nativeElement,
-                                       'href'))
-                   .toEqual('/user/brian');
+               expect(getHref(fixture)).toEqual('/user/brian');
                async.done();
              });
        }));
@@ -127,11 +125,7 @@ export function main() {
              .then((_) => router.navigateByUrl('/page/1'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
-                                           .nativeElement,
-                                       'href'))
-                   .toEqual('/page/2');
+               expect(getHref(fixture)).toEqual('/page/2');
                async.done();
              });
        }));
@@ -146,11 +140,7 @@ export function main() {
              .then((_) => router.navigateByUrl('/page/1'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
-                                           .nativeElement,
-                                       'href'))
-                   .toEqual('/page/2');
+               expect(getHref(fixture)).toEqual('/page/2');
                async.done();
              });
        }));
@@ -164,11 +154,7 @@ export function main() {
              .then((_) => router.navigateByUrl('/book/1984/page/1'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
-                                           .nativeElement,
-                                       'href'))
-                   .toEqual('/book/1984/page/100');
+               expect(getHref(fixture)).toEqual('/book/1984/page/100');
                async.done();
              });
        }));
@@ -202,11 +188,7 @@ export function main() {
              .then((_) => router.navigateByUrl('/child-with-grandchild/grandchild'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
-                                           .nativeElement,
-                                       'href'))
-                   .toEqual('/child-with-grandchild/grandchild');
+               expect(getHref(fixture)).toEqual('/child-with-grandchild/grandchild');
                async.done();
              });
        }));
@@ -219,15 +201,17 @@ export function main() {
              .then((_) => router.navigateByUrl('/book/1984/page/1'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
+               // TODO(juliemr): This should be one By.css('book-cmp a') query, but the parse5
+               // adapter
+               // can't handle css child selectors.
+               expect(DOM.getAttribute(fixture.debugElement.query(By.css('book-cmp'))
+                                           .query(By.css('a'))
                                            .nativeElement,
                                        'href'))
                    .toEqual('/book/1984/page/100');
 
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[2]
-                                           .componentViewChildren[0]
+               expect(DOM.getAttribute(fixture.debugElement.query(By.css('page-cmp'))
+                                           .query(By.css('a'))
                                            .nativeElement,
                                        'href'))
                    .toEqual('/book/1984/page/2');
@@ -241,11 +225,7 @@ export function main() {
              .then((_) => router.navigateByUrl('/'))
              .then((_) => {
                fixture.detectChanges();
-               expect(DOM.getAttribute(fixture.debugElement.componentViewChildren[1]
-                                           .componentViewChildren[0]
-                                           .nativeElement,
-                                       'href'))
-                   .toEqual('/(aside)');
+               expect(getHref(fixture)).toEqual('/(aside)');
                async.done();
              });
        }));
@@ -257,8 +237,8 @@ export function main() {
                    new Route({path: '/child', component: HelloCmp, name: 'Child'}),
                    new Route({path: '/better-child', component: Hello2Cmp, name: 'BetterChild'})
                  ])
-               .then((_) => compile(`<a [router-link]="['./Child']" class="child-link">Child</a>
-                                <a [router-link]="['./BetterChild']" class="better-child-link">Better Child</a>
+               .then((_) => compile(`<a [routerLink]="['./Child']" class="child-link">Child</a>
+                                <a [routerLink]="['./BetterChild']" class="better-child-link">Better Child</a>
                                 <router-outlet></router-outlet>`))
                .then((_) => {
                  var element = fixture.debugElement.nativeElement;
@@ -292,8 +272,8 @@ export function main() {
                      name: 'ChildWithGrandchild'
                    })
                  ])
-               .then((_) => compile(`<a [router-link]="['./Child']" class="child-link">Child</a>
-                                <a [router-link]="['./ChildWithGrandchild/Grandchild']" class="child-with-grandchild-link">Better Child</a>
+               .then((_) => compile(`<a [routerLink]="['./Child']" class="child-link">Child</a>
+                                <a [routerLink]="['./ChildWithGrandchild/Grandchild']" class="child-with-grandchild-link">Better Child</a>
                                 <router-outlet></router-outlet>`))
                .then((_) => {
                  var element = fixture.debugElement.nativeElement;
@@ -323,19 +303,36 @@ export function main() {
                  router.navigateByUrl('/child-with-grandchild/grandchild');
                });
          }));
+
+
+      describe('router link dsl', () => {
+        it('should generate link hrefs with params', inject([AsyncTestCompleter], (async) => {
+             compile('<a href="hello" [routerLink]="route:./User(name: name)">{{name}}</a>')
+                 .then((_) => router.config(
+                           [new Route({path: '/user/:name', component: UserCmp, name: 'User'})]))
+                 .then((_) => router.navigateByUrl('/a/b'))
+                 .then((_) => {
+                   fixture.debugElement.componentInstance.name = 'brian';
+                   fixture.detectChanges();
+                   expect(fixture.debugElement.nativeElement).toHaveText('brian');
+                   expect(getHref(fixture)).toEqual('/user/brian');
+                   async.done();
+                 });
+           }));
+      });
     });
 
     describe('when clicked', () => {
 
       var clickOnElement = function(view) {
-        var anchorEl = fixture.debugElement.componentViewChildren[0].nativeElement;
+        var anchorEl = fixture.debugElement.query(By.css('a')).nativeElement;
         var dispatchedEvent = DOM.createMouseEvent('click');
         DOM.dispatchEvent(anchorEl, dispatchedEvent);
         return dispatchedEvent;
       };
 
       it('should navigate to link hrefs without params', inject([AsyncTestCompleter], (async) => {
-           compile('<a href="hello" [router-link]="[\'./User\']"></a>')
+           compile('<a href="hello" [routerLink]="[\'./User\']"></a>')
                .then((_) => router.config(
                          [new Route({path: '/user', component: UserCmp, name: 'User'})]))
                .then((_) => router.navigateByUrl('/a/b'))
@@ -347,7 +344,7 @@ export function main() {
 
                  // router navigation is async.
                  router.subscribe((_) => {
-                   expect(location.urlChanges).toEqual(['/user']);
+                   expect((<SpyLocation>location).urlChanges).toEqual(['/user']);
                    async.done();
                  });
                });
@@ -355,20 +352,21 @@ export function main() {
 
       it('should navigate to link hrefs in presence of base href',
          inject([AsyncTestCompleter], (async) => {
-           location.setBaseHref('/base');
-           compile('<a href="hello" [router-link]="[\'./User\']"></a>')
+           (<SpyLocation>location).setBaseHref('/base');
+           compile('<a href="hello" [routerLink]="[\'./User\']"></a>')
                .then((_) => router.config(
                          [new Route({path: '/user', component: UserCmp, name: 'User'})]))
                .then((_) => router.navigateByUrl('/a/b'))
                .then((_) => {
                  fixture.detectChanges();
 
+
                  var dispatchedEvent = clickOnElement(fixture);
                  expect(DOM.isPrevented(dispatchedEvent)).toBe(true);
 
                  // router navigation is async.
                  router.subscribe((_) => {
-                   expect(location.urlChanges).toEqual(['/base/user']);
+                   expect((<SpyLocation>location).urlChanges).toEqual(['/base/user']);
                    async.done();
                  });
                });
@@ -378,10 +376,10 @@ export function main() {
 }
 
 function getHref(tc: ComponentFixture) {
-  return DOM.getAttribute(tc.debugElement.componentViewChildren[0].nativeElement, 'href');
+  return DOM.getAttribute(tc.debugElement.query(By.css('a')).nativeElement, 'href');
 }
 
-@Component({selector: 'my-comp'})
+@Component({selector: 'my-comp', template: '', directives: [ROUTER_DIRECTIVES]})
 class MyComp {
   name;
 }
@@ -395,7 +393,7 @@ class UserCmp {
 @Component({
   selector: 'page-cmp',
   template:
-      `page #{{pageNumber}} | <a href="hello" [router-link]="[\'../Page\', {number: nextPage}]">next</a>`,
+      `page #{{pageNumber}} | <a href="hello" [routerLink]="[\'../Page\', {number: nextPage}]">next</a>`,
   directives: [RouterLink]
 })
 class SiblingPageCmp {
@@ -410,7 +408,7 @@ class SiblingPageCmp {
 @Component({
   selector: 'page-cmp',
   template:
-      `page #{{pageNumber}} | <a href="hello" [router-link]="[\'Page\', {number: nextPage}]">next</a>`,
+      `page #{{pageNumber}} | <a href="hello" [routerLink]="[\'Page\', {number: nextPage}]">next</a>`,
   directives: [RouterLink]
 })
 class NoPrefixSiblingPageCmp {
@@ -436,8 +434,8 @@ function parentCmpLoader() {
 
 @Component({
   selector: 'parent-cmp',
-  template: `{ <a [router-link]="['./Grandchild']" class="grandchild-link">Grandchild</a>
-               <a [router-link]="['./BetterGrandchild']" class="better-grandchild-link">Better Grandchild</a>
+  template: `{ <a [routerLink]="['./Grandchild']" class="grandchild-link">Grandchild</a>
+               <a [routerLink]="['./BetterGrandchild']" class="better-grandchild-link">Better Grandchild</a>
                <router-outlet></router-outlet> }`,
   directives: ROUTER_DIRECTIVES
 })
@@ -450,7 +448,7 @@ class ParentCmp {
 
 @Component({
   selector: 'book-cmp',
-  template: `<a href="hello" [router-link]="[\'./Page\', {number: 100}]">{{title}}</a> |
+  template: `<a href="hello" [routerLink]="[\'./Page\', {number: 100}]">{{title}}</a> |
     <router-outlet></router-outlet>`,
   directives: ROUTER_DIRECTIVES
 })
@@ -462,7 +460,7 @@ class BookCmp {
 
 @Component({
   selector: 'book-cmp',
-  template: `<a href="hello" [router-link]="[\'Page\', {number: 100}]">{{title}}</a> |
+  template: `<a href="hello" [routerLink]="[\'Page\', {number: 100}]">{{title}}</a> |
     <router-outlet></router-outlet>`,
   directives: ROUTER_DIRECTIVES
 })
@@ -474,7 +472,7 @@ class NoPrefixBookCmp {
 
 @Component({
   selector: 'book-cmp',
-  template: `<a href="hello" [router-link]="[\'Book\', {number: 100}]">{{title}}</a> |
+  template: `<a href="hello" [routerLink]="[\'Book\', {number: 100}]">{{title}}</a> |
     <router-outlet></router-outlet>`,
   directives: ROUTER_DIRECTIVES
 })
@@ -487,7 +485,7 @@ class AmbiguousBookCmp {
 @Component({
   selector: 'aux-cmp',
   template:
-      `<a [router-link]="[\'./Hello\', [ \'Aside\' ] ]">aside</a> |
+      `<a [routerLink]="[\'./Hello\', [ \'Aside\' ] ]">aside</a> |
     <router-outlet></router-outlet> | aside <router-outlet name="aside"></router-outlet>`,
   directives: ROUTER_DIRECTIVES
 })

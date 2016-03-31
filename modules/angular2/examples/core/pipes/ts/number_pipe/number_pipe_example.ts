@@ -1,5 +1,5 @@
-import {Component, provide} from 'angular2/angular2';
-import {bootstrap} from 'angular2/bootstrap';
+import {Component, provide} from 'angular2/core';
+import {bootstrap} from 'angular2/platform/browser';
 
 // #docregion NumberPipe
 @Component({
@@ -48,7 +48,7 @@ export class CurrencyPipeExample {
 @Component({
   selector: 'example-app',
   directives: [NumberPipeExample, PercentPipeExample, CurrencyPipeExample],
-  template: ` 
+  template: `
     <h1>Numeric Pipe Examples</h1>
     <h2>NumberPipe Example</h2>
     <number-example></number-example>

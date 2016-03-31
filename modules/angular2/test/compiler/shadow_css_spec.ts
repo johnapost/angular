@@ -144,12 +144,12 @@ export function main() {
 
     it('should handle /deep/', () => {
       var css = s('x /deep/ y {}', 'a');
-      expect(css).toEqual('x[a] y[a] {}');
+      expect(css).toEqual('x[a] y {}');
     });
 
     it('should handle >>>', () => {
       var css = s('x >>> y {}', 'a');
-      expect(css).toEqual('x[a] y[a] {}');
+      expect(css).toEqual('x[a] y {}');
     });
 
     it('should pass through @import directives', () => {
@@ -203,7 +203,7 @@ export function main() {
             .toEqual([new CssRule('a', 'b {c}'), new CssRule('d', 'e')]);
       });
 
-      it('should capture mutiple rules where some have no body', () => {
+      it('should capture multiple rules where some have no body', () => {
         expect(captureRules('@import a ; b {c}'))
             .toEqual([new CssRule('@import a', ''), new CssRule('b', 'c')]);
       });

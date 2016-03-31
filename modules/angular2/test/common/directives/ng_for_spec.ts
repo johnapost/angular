@@ -2,7 +2,7 @@ import {
   AsyncTestCompleter,
   TestComponentBuilder,
   beforeEach,
-  beforeEachBindings,
+  beforeEachProviders,
   ddescribe,
   describe,
   el,
@@ -14,16 +14,16 @@ import {
 } from 'angular2/testing_internal';
 
 import {ListWrapper} from 'angular2/src/facade/collection';
-
-import {Component, View, TemplateRef, ContentChild} from 'angular2/angular2';
-
+import {IS_DART} from 'angular2/src/facade/lang';
+import {Component, TemplateRef, ContentChild} from 'angular2/core';
 import {NgFor} from 'angular2/src/common/directives/ng_for';
-
+import {NgIf} from 'angular2/src/common/directives/ng_if';
+import {By} from 'angular2/platform/common_dom';
 
 export function main() {
-  describe('ng-for', () => {
+  describe('ngFor', () => {
     var TEMPLATE =
-        '<div><copy-me template="ng-for #item of items">{{item.toString()}};</copy-me></div>';
+        '<div><copy-me template="ngFor #item of items">{{item.toString()}};</copy-me></div>';
 
     it('should reflect initial elements',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
@@ -100,7 +100,7 @@ export function main() {
 
     it('should iterate over an array of objects',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<ul><li template="ng-for #item of items">{{item["name"]}};</li></ul>';
+         var template = '<ul><li template="ngFor #item of items">{{item["name"]}};</li></ul>';
 
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
@@ -130,7 +130,7 @@ export function main() {
 
     it('should gracefully handle nulls',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<ul><li template="ng-for #item of null">{{item}};</li></ul>';
+         var template = '<ul><li template="ngFor #item of null">{{item}};</li></ul>';
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
              .then((fixture) => {
@@ -158,6 +158,24 @@ export function main() {
                async.done();
              });
        }));
+
+    if (!IS_DART) {
+      it('should throw on non-iterable ref and suggest using an array',
+         inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+           tcb.overrideTemplate(TestComponent, TEMPLATE)
+               .createAsync(TestComponent)
+               .then((fixture) => {
+                 fixture.debugElement.componentInstance.items = 'whaaa';
+                 try {
+                   fixture.detectChanges()
+                 } catch (e) {
+                   expect(e.message).toContain(
+                       `Cannot find a differ supporting object 'whaaa' of type 'string'. NgFor only supports binding to Iterables such as Arrays.`);
+                   async.done();
+                 }
+               });
+         }));
+    }
 
     it('should throw on ref changing to string',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
@@ -189,8 +207,8 @@ export function main() {
     it('should repeat over nested arrays',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          var template = '<div>' +
-                        '<div template="ng-for #item of items">' +
-                        '<div template="ng-for #subitem of item">' +
+                        '<div template="ngFor #item of items">' +
+                        '<div template="ngFor #subitem of item">' +
                         '{{subitem}}-{{item.length}};' +
                         '</div>|' +
                         '</div>' +
@@ -215,8 +233,8 @@ export function main() {
 
     it('should repeat over nested arrays with no intermediate element',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         var template = '<div><template ng-for #item [ng-for-of]="items">' +
-                        '<div template="ng-for #subitem of item">' +
+         var template = '<div><template ngFor #item [ngForOf]="items">' +
+                        '<div template="ngFor #subitem of item">' +
                         '{{subitem}}-{{item.length}};' +
                         '</div></template></div>';
 
@@ -234,10 +252,37 @@ export function main() {
              });
        }));
 
+    it('should repeat over nested ngIf that are the last node in the ngFor temlate',
+       inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+         var template =
+             `<div><template ngFor #item [ngForOf]="items" #i="index"><div>{{i}}|</div>` +
+             `<div *ngIf="i % 2 == 0">even|</div></template></div>`;
+
+         tcb.overrideTemplate(TestComponent, template)
+             .createAsync(TestComponent)
+             .then((fixture) => {
+               var el = fixture.debugElement.nativeElement;
+               var items = [1];
+               fixture.debugElement.componentInstance.items = items;
+               fixture.detectChanges();
+               expect(el).toHaveText('0|even|');
+
+               items.push(1);
+               fixture.detectChanges();
+               expect(el).toHaveText('0|even|1|');
+
+               items.push(1);
+               fixture.detectChanges();
+               expect(el).toHaveText('0|even|1|2|even|');
+
+               async.done();
+             });
+       }));
+
     it('should display indices correctly',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          var template =
-             '<div><copy-me template="ng-for: var item of items; var i=index">{{i.toString()}}</copy-me></div>';
+             '<div><copy-me template="ngFor: var item of items; var i=index">{{i.toString()}}</copy-me></div>';
 
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
@@ -256,7 +301,7 @@ export function main() {
     it('should display last item correctly',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          var template =
-             '<div><copy-me template="ng-for: var item of items; var isLast=last">{{isLast.toString()}}</copy-me></div>';
+             '<div><copy-me template="ngFor: var item of items; var isLast=last">{{isLast.toString()}}</copy-me></div>';
 
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
@@ -275,7 +320,7 @@ export function main() {
     it('should display even items correctly',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          var template =
-             '<div><copy-me template="ng-for: var item of items; var isEven=even">{{isEven.toString()}}</copy-me></div>';
+             '<div><copy-me template="ngFor: var item of items; var isEven=even">{{isEven.toString()}}</copy-me></div>';
 
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
@@ -294,7 +339,7 @@ export function main() {
     it('should display odd items correctly',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          var template =
-             '<div><copy-me template="ng-for: var item of items; var isOdd=odd">{{isOdd.toString()}}</copy-me></div>';
+             '<div><copy-me template="ngFor: var item of items; var isOdd=odd">{{isOdd.toString()}}</copy-me></div>';
 
          tcb.overrideTemplate(TestComponent, template)
              .createAsync(TestComponent)
@@ -314,13 +359,13 @@ export function main() {
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
          tcb.overrideTemplate(
                 TestComponent,
-                '<ul><template ng-for [ng-for-of]="items" [ng-for-template]="contentTpl"></template></ul>')
+                '<ul><template ngFor [ngForOf]="items" [ngForTemplate]="contentTpl"></template></ul>')
              .overrideTemplate(
                  ComponentUsingTestComponent,
                  '<test-cmp><li template="#item #i=index">{{i}}: {{item}};</li></test-cmp>')
              .createAsync(ComponentUsingTestComponent)
              .then((fixture) => {
-               var testComponent = fixture.debugElement.componentViewChildren[0];
+               var testComponent = fixture.debugElement.children[0];
                testComponent.componentInstance.items = ['a', 'b', 'c'];
                fixture.detectChanges();
                expect(testComponent.nativeElement).toHaveText('0: a;1: b;2: c;');
@@ -331,12 +376,12 @@ export function main() {
 
     it('should use a default template if a custom one is null',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         tcb.overrideTemplate(TestComponent, `<ul><template ng-for #item [ng-for-of]="items"
-         [ng-for-template]="contentTpl" #i="index">{{i}}: {{item}};</template></ul>`)
+         tcb.overrideTemplate(TestComponent, `<ul><template ngFor #item [ngForOf]="items"
+         [ngForTemplate]="contentTpl" #i="index">{{i}}: {{item}};</template></ul>`)
              .overrideTemplate(ComponentUsingTestComponent, '<test-cmp></test-cmp>')
              .createAsync(ComponentUsingTestComponent)
              .then((fixture) => {
-               var testComponent = fixture.debugElement.componentViewChildren[0];
+               var testComponent = fixture.debugElement.children[0];
                testComponent.componentInstance.items = ['a', 'b', 'c'];
                fixture.detectChanges();
                expect(testComponent.nativeElement).toHaveText('0: a;1: b;2: c;');
@@ -347,14 +392,14 @@ export function main() {
 
     it('should use a custom template when both default and a custom one are present',
        inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
-         tcb.overrideTemplate(TestComponent, `<ul><template ng-for #item [ng-for-of]="items"
-         [ng-for-template]="contentTpl" #i="index">{{i}}=> {{item}};</template></ul>`)
+         tcb.overrideTemplate(TestComponent, `<ul><template ngFor #item [ngForOf]="items"
+         [ngForTemplate]="contentTpl" #i="index">{{i}}=> {{item}};</template></ul>`)
              .overrideTemplate(
                  ComponentUsingTestComponent,
                  '<test-cmp><li template="#item #i=index">{{i}}: {{item}};</li></test-cmp>')
              .createAsync(ComponentUsingTestComponent)
              .then((fixture) => {
-               var testComponent = fixture.debugElement.componentViewChildren[0];
+               var testComponent = fixture.debugElement.children[0];
                testComponent.componentInstance.items = ['a', 'b', 'c'];
                fixture.detectChanges();
                expect(testComponent.nativeElement).toHaveText('0: a;1: b;2: c;');
@@ -362,6 +407,83 @@ export function main() {
                async.done();
              });
        }));
+
+    describe('track by', function() {
+      it('should not replace tracked items',
+         inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+           var template =
+               `<template ngFor #item [ngForOf]="items" [ngForTrackBy]="trackById" #i="index">
+               <p>{{items[i]}}</p>
+              </template>`;
+           tcb.overrideTemplate(TestComponent, template)
+               .createAsync(TestComponent)
+               .then((fixture) => {
+                 var buildItemList =
+                     () => {
+                       fixture.debugElement.componentInstance.items = [{'id': 'a'}];
+                       fixture.detectChanges();
+                       return fixture.debugElement.queryAll(By.css('p'))[0];
+                     }
+
+                 var firstP = buildItemList();
+                 var finalP = buildItemList();
+                 expect(finalP.nativeElement).toBe(firstP.nativeElement);
+                 async.done();
+               });
+         }));
+      it('should update implicit local variable on view',
+         inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+           var template =
+               `<div><template ngFor #item [ngForOf]="items" [ngForTrackBy]="trackById">{{item['color']}}</template></div>`;
+           tcb.overrideTemplate(TestComponent, template)
+               .createAsync(TestComponent)
+               .then((fixture) => {
+                 fixture.debugElement.componentInstance.items = [{'id': 'a', 'color': 'blue'}];
+                 fixture.detectChanges();
+                 expect(fixture.debugElement.nativeElement).toHaveText('blue');
+                 fixture.debugElement.componentInstance.items = [{'id': 'a', 'color': 'red'}];
+                 fixture.detectChanges();
+                 expect(fixture.debugElement.nativeElement).toHaveText('red');
+                 async.done();
+               });
+         }));
+      it('should move items around and keep them updated ',
+         inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+           var template =
+               `<div><template ngFor #item [ngForOf]="items" [ngForTrackBy]="trackById">{{item['color']}}</template></div>`;
+           tcb.overrideTemplate(TestComponent, template)
+               .createAsync(TestComponent)
+               .then((fixture) => {
+                 fixture.debugElement.componentInstance.items =
+                     [{'id': 'a', 'color': 'blue'}, {'id': 'b', 'color': 'yellow'}];
+                 fixture.detectChanges();
+                 expect(fixture.debugElement.nativeElement).toHaveText('blueyellow');
+                 fixture.debugElement.componentInstance.items =
+                     [{'id': 'b', 'color': 'orange'}, {'id': 'a', 'color': 'red'}];
+                 fixture.detectChanges();
+                 expect(fixture.debugElement.nativeElement).toHaveText('orangered');
+                 async.done();
+               });
+         }));
+
+      it('should handle added and removed items properly when tracking by index',
+         inject([TestComponentBuilder, AsyncTestCompleter], (tcb: TestComponentBuilder, async) => {
+           var template =
+               `<div><template ngFor #item [ngForOf]="items" [ngForTrackBy]="trackByIndex">{{item}}</template></div>`;
+           tcb.overrideTemplate(TestComponent, template)
+               .createAsync(TestComponent)
+               .then((fixture) => {
+                 fixture.debugElement.componentInstance.items = ['a', 'b', 'c', 'd'];
+                 fixture.detectChanges();
+                 fixture.debugElement.componentInstance.items = ['e', 'f', 'g', 'h'];
+                 fixture.detectChanges();
+                 fixture.debugElement.componentInstance.items = ['e', 'f', 'h'];
+                 fixture.detectChanges();
+                 expect(fixture.debugElement.nativeElement).toHaveText('efh');
+                 async.done();
+               });
+         }));
+    });
   });
 }
 
@@ -369,16 +491,16 @@ class Foo {
   toString() { return 'foo'; }
 }
 
-@Component({selector: 'test-cmp'})
-@View({directives: [NgFor]})
+@Component({selector: 'test-cmp', directives: [NgFor, NgIf], template: ''})
 class TestComponent {
   @ContentChild(TemplateRef) contentTpl: TemplateRef;
   items: any;
   constructor() { this.items = [1, 2]; }
+  trackById(index: number, item: any): string { return item['id']; }
+  trackByIndex(index: number, item: any): number { return index; }
 }
 
-@Component({selector: 'outer-cmp'})
-@View({directives: [TestComponent]})
+@Component({selector: 'outer-cmp', directives: [TestComponent], template: ''})
 class ComponentUsingTestComponent {
   items: any;
   constructor() { this.items = [1, 2]; }

@@ -23,13 +23,17 @@ export abstract class DomAdapter {
   abstract logGroup(error);
   abstract logGroupEnd();
 
+  /** @deprecated */
   abstract getXHR(): Type;
 
   /**
    * Maps attribute names to their corresponding property names for cases
    * where attribute name doesn't match property name.
    */
-  attrToPropMap: {[key: string]: string};
+  get attrToPropMap(): {[key: string]: string} { return this._attrToPropMap; };
+  set attrToPropMap(value: {[key: string]: string}) { this._attrToPropMap = value; };
+  /** @internal */
+  _attrToPropMap: {[key: string]: string};
 
   abstract parse(templateHtml: string);
   abstract query(selector: string): any;
@@ -83,19 +87,23 @@ export abstract class DomAdapter {
   abstract getElementsByClassName(element, name: string): HTMLElement[];
   abstract getElementsByTagName(element, name: string): HTMLElement[];
   abstract classList(element): any[];
-  abstract addClass(element, classname: string);
-  abstract removeClass(element, classname: string);
-  abstract hasClass(element, classname: string): boolean;
-  abstract setStyle(element, stylename: string, stylevalue: string);
-  abstract removeStyle(element, stylename: string);
-  abstract getStyle(element, stylename: string): string;
+  abstract addClass(element, className: string);
+  abstract removeClass(element, className: string);
+  abstract hasClass(element, className: string): boolean;
+  abstract setStyle(element, styleName: string, styleValue: string);
+  abstract removeStyle(element, styleName: string);
+  abstract getStyle(element, styleName: string): string;
+  abstract hasStyle(element, styleName: string, styleValue?: string): boolean;
   abstract tagName(element): string;
   abstract attributeMap(element): Map<string, string>;
   abstract hasAttribute(element, attribute: string): boolean;
+  abstract hasAttributeNS(element, ns: string, attribute: string): boolean;
   abstract getAttribute(element, attribute: string): string;
+  abstract getAttributeNS(element, ns: string, attribute: string): string;
   abstract setAttribute(element, name: string, value: string);
   abstract setAttributeNS(element, ns: string, name: string, value: string);
   abstract removeAttribute(element, attribute: string);
+  abstract removeAttributeNS(element, ns: string, attribute: string);
   abstract templateAwareRoot(el);
   abstract createHtmlDocument(): HTMLDocument;
   abstract defaultDoc(): HTMLDocument;

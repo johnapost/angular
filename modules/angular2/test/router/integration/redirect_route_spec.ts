@@ -1,5 +1,5 @@
 import {
-  RootTestComponent,
+  ComponentFixture,
   AsyncTestCompleter,
   TestComponentBuilder,
   beforeEach,
@@ -22,10 +22,10 @@ import {
   AuxRoute,
   AsyncRoute,
   Redirect
-} from 'angular2/src/router/route_config_decorator';
+} from 'angular2/src/router/route_config/route_config_decorator';
 
 import {TEST_ROUTER_PROVIDERS, RootCmp, compile} from './util';
-import {HelloCmp, RedirectToParentCmp} from './impl/fixture_components';
+import {HelloCmp, GoodbyeCmp, RedirectToParentCmp} from './impl/fixture_components';
 
 var cmpInstanceCount;
 var childCmpInstanceCount;
@@ -34,7 +34,7 @@ export function main() {
   describe('redirects', () => {
 
     var tcb: TestComponentBuilder;
-    var rootTC: RootTestComponent;
+    var rootTC: ComponentFixture;
     var rtr;
 
     beforeEachProviders(() => TEST_ROUTER_PROVIDERS);
@@ -114,6 +114,25 @@ export function main() {
                rootTC.detectChanges();
                expect(rootTC.debugElement.nativeElement).toHaveText('hello');
                expect(location.urlChanges).toEqual(['/redirected']);
+               async.done();
+             });
+       }));
+
+
+    it('should not redirect when redirect is less specific than other matching routes',
+       inject([AsyncTestCompleter, Location], (async, location) => {
+         compile(tcb)
+             .then((rtc) => {rootTC = rtc})
+             .then((_) => rtr.config([
+               new Route({path: '/foo', component: HelloCmp, name: 'Hello'}),
+               new Route({path: '/:param', component: GoodbyeCmp, name: 'Goodbye'}),
+               new Redirect({path: '/*rest', redirectTo: ['/Hello']})
+             ]))
+             .then((_) => rtr.navigateByUrl('/bye'))
+             .then((_) => {
+               rootTC.detectChanges();
+               expect(rootTC.debugElement.nativeElement).toHaveText('goodbye');
+               expect(location.urlChanges).toEqual(['/bye']);
                async.done();
              });
        }));

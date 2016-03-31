@@ -2,21 +2,20 @@ var broccoli = require('broccoli');
 var fs = require('fs');
 var makeBrowserTree = require('./trees/browser_tree');
 var makeNodeTree = require('./trees/node_tree');
-var makeDartTree = require('./trees/dart_tree');
 var path = require('path');
 var printSlowTrees = require('broccoli-slow-trees');
 var Q = require('q');
 
-type ProjectMap = {
+export type ProjectMap = {
   [key: string]: boolean
 };
 
-type Options = {
+export type Options = {
   projects: ProjectMap;
-noTypeChecks: boolean;
-generateEs6: boolean;
-}
-;
+  noTypeChecks: boolean;
+  generateEs6: boolean;
+  useBundles: boolean;
+};
 
 /**
  * BroccoliBuilder facade for all of our build pipelines.
@@ -70,9 +69,11 @@ export class AngularBuilder {
         {
           name: 'dev',
           typeAssertions: true,
+          sourceMaps: true,
           projects: opts.projects,
           noTypeChecks: opts.noTypeChecks,
-          generateEs6: opts.generateEs6
+          generateEs6: opts.generateEs6,
+          useBundles: opts.useBundles
         },
         path.join(this.outputPath, 'js', 'dev'));
     return new broccoli.Builder(tree);
@@ -84,9 +85,11 @@ export class AngularBuilder {
         {
           name: 'prod',
           typeAssertions: false,
+          sourceMaps: false,
           projects: opts.projects,
           noTypeChecks: opts.noTypeChecks,
-          generateEs6: opts.generateEs6
+          generateEs6: opts.generateEs6,
+          useBundles: opts.useBundles
         },
         path.join(this.outputPath, 'js', 'prod'));
     return new broccoli.Builder(tree);
@@ -106,6 +109,8 @@ export class AngularBuilder {
       logs: this.options.logs,
       projects: projects
     };
+    // Workaround for https://github.com/dart-lang/dart_style/issues/493
+    var makeDartTree = require('./trees/dart_tree');
     let tree = makeDartTree(options);
     return new broccoli.Builder(tree);
   }

@@ -1,5 +1,6 @@
 import {HtmlElementAst} from './html_ast';
 import {isBlank, isPresent} from 'angular2/src/facade/lang';
+import {splitNsName} from './html_tags';
 
 const NG_CONTENT_SELECT_ATTR = 'select';
 const NG_CONTENT_ELEMENT = 'ng-content';
@@ -9,29 +10,35 @@ const LINK_STYLE_HREF_ATTR = 'href';
 const LINK_STYLE_REL_VALUE = 'stylesheet';
 const STYLE_ELEMENT = 'style';
 const SCRIPT_ELEMENT = 'script';
-const NG_NON_BINDABLE_ATTR = 'ng-non-bindable';
+const NG_NON_BINDABLE_ATTR = 'ngNonBindable';
+const NG_PROJECT_AS = 'ngProjectAs';
 
 export function preparseElement(ast: HtmlElementAst): PreparsedElement {
   var selectAttr = null;
   var hrefAttr = null;
   var relAttr = null;
   var nonBindable = false;
+  var projectAs: string = null;
   ast.attrs.forEach(attr => {
-    let attrName = attr.name.toLowerCase();
-    if (attrName == NG_CONTENT_SELECT_ATTR) {
+    let lcAttrName = attr.name.toLowerCase();
+    if (lcAttrName == NG_CONTENT_SELECT_ATTR) {
       selectAttr = attr.value;
-    } else if (attrName == LINK_STYLE_HREF_ATTR) {
+    } else if (lcAttrName == LINK_STYLE_HREF_ATTR) {
       hrefAttr = attr.value;
-    } else if (attrName == LINK_STYLE_REL_ATTR) {
+    } else if (lcAttrName == LINK_STYLE_REL_ATTR) {
       relAttr = attr.value;
-    } else if (attrName == NG_NON_BINDABLE_ATTR) {
+    } else if (attr.name == NG_NON_BINDABLE_ATTR) {
       nonBindable = true;
+    } else if (attr.name == NG_PROJECT_AS) {
+      if (attr.value.length > 0) {
+        projectAs = attr.value;
+      }
     }
   });
   selectAttr = normalizeNgContentSelect(selectAttr);
   var nodeName = ast.name.toLowerCase();
   var type = PreparsedElementType.OTHER;
-  if (nodeName == NG_CONTENT_ELEMENT) {
+  if (splitNsName(nodeName)[1] == NG_CONTENT_ELEMENT) {
     type = PreparsedElementType.NG_CONTENT;
   } else if (nodeName == STYLE_ELEMENT) {
     type = PreparsedElementType.STYLE;
@@ -40,7 +47,7 @@ export function preparseElement(ast: HtmlElementAst): PreparsedElement {
   } else if (nodeName == LINK_ELEMENT && relAttr == LINK_STYLE_REL_VALUE) {
     type = PreparsedElementType.STYLESHEET;
   }
-  return new PreparsedElement(type, selectAttr, hrefAttr, nonBindable);
+  return new PreparsedElement(type, selectAttr, hrefAttr, nonBindable, projectAs);
 }
 
 export enum PreparsedElementType {
@@ -53,7 +60,7 @@ export enum PreparsedElementType {
 
 export class PreparsedElement {
   constructor(public type: PreparsedElementType, public selectAttr: string, public hrefAttr: string,
-              public nonBindable: boolean) {}
+              public nonBindable: boolean, public projectAs: string) {}
 }
 
 

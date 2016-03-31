@@ -9,7 +9,7 @@ import {CORE_DIRECTIVES} from './directives';
  * NgModel).
  *
  * This collection can be used to quickly enumerate all the built-in directives in the `directives`
- * property of the `@Component` or `@View` decorators.
+ * property of the `@Component` decorator.
  *
  * ### Example
  *
@@ -17,7 +17,7 @@ import {CORE_DIRECTIVES} from './directives';
  *
  * ```typescript
  * import {NgClass, NgIf, NgFor, NgSwitch, NgSwitchWhen, NgSwitchDefault, NgModel, NgForm} from
- * 'angular2/angular2';
+ * 'angular2/common';
  * import {OtherDirective} from './myDirectives';
  *
  * @Component({
@@ -33,7 +33,7 @@ import {CORE_DIRECTIVES} from './directives';
  * one could import all the common directives at once:
  *
  * ```typescript
- * import {COMMON_DIRECTIVES} from 'angular2/angular2';
+ * import {COMMON_DIRECTIVES} from 'angular2/common';
  * import {OtherDirective} from './myDirectives';
  *
  * @Component({

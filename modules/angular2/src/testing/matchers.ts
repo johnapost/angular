@@ -1,20 +1,107 @@
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
-import {global} from 'angular2/src/facade/lang';
+import {global, isString} from 'angular2/src/facade/lang';
+import {StringMapWrapper} from 'angular2/src/facade/collection';
 
-
+/**
+ * Jasmine matchers that check Angular specific conditions.
+ */
 export interface NgMatchers extends jasmine.Matchers {
+  /**
+   * Expect the value to be a `Promise`.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toBePromise'}
+   */
   toBePromise(): boolean;
+
+  /**
+   * Expect the value to be an instance of a class.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toBeAnInstanceOf'}
+   */
   toBeAnInstanceOf(expected: any): boolean;
+
+  /**
+   * Expect the element to have exactly the given text.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toHaveText'}
+   */
   toHaveText(expected: any): boolean;
+
+  /**
+   * Expect the element to have the given CSS class.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toHaveCssClass'}
+   */
   toHaveCssClass(expected: any): boolean;
+
+  /**
+   * Expect the element to have the given CSS styles.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toHaveCssStyle'}
+   */
+  toHaveCssStyle(expected: any): boolean;
+
+  /**
+   * Expect a class to implement the interface of the given class.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toImplement'}
+   */
   toImplement(expected: any): boolean;
+
+  /**
+   * Expect an exception to contain the given error text.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toContainError'}
+   */
   toContainError(expected: any): boolean;
+
+  /**
+   * Expect a function to throw an error with the given error text when executed.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toThrowErrorWith'}
+   */
   toThrowErrorWith(expectedMessage: any): boolean;
+
+  /**
+   * Expect a string to match the given regular expression.
+   *
+   * ## Example
+   *
+   * {@example testing/ts/matchers.ts region='toMatchPattern'}
+   */
+  toMatchPattern(expectedMessage: any): boolean;
+
+  /**
+   * Invert the matchers.
+   */
   not: NgMatchers;
 }
 
-var _global: jasmine.GlobalPolluter = <any>(typeof window === 'undefined' ? global : window);
+var _global = <any>(typeof window === 'undefined' ? global : window);
 
+/**
+ * Jasmine matching function with Angular matchers mixed in.
+ *
+ * ## Example
+ *
+ * {@example testing/ts/matchers.ts region='toHaveText'}
+ */
 export var expect: (actual: any) => NgMatchers = <any>_global.expect;
 
 
@@ -105,6 +192,31 @@ _global.beforeEach(function() {
       }
     },
 
+    toHaveCssStyle: function() {
+      return {
+        compare: function(actual, styles) {
+          var allPassed;
+          if (isString(styles)) {
+            allPassed = DOM.hasStyle(actual, styles);
+          } else {
+            allPassed = !StringMapWrapper.isEmpty(styles);
+            StringMapWrapper.forEach(styles, (style, prop) => {
+              allPassed = allPassed && DOM.hasStyle(actual, prop, style);
+            });
+          }
+
+          return {
+            pass: allPassed,
+            get message() {
+              var expectedValueStr = isString(styles) ? styles : JSON.stringify(styles);
+              return `Expected ${actual.outerHTML} ${!allPassed ? ' ' : 'not '}to contain the
+                      CSS ${isString(styles) ? 'property' : 'styles'} "${expectedValueStr}"`;
+            }
+          };
+        }
+      };
+    },
+
     toContainError: function() {
       return {
         compare: function(actual, expectedText) {
@@ -135,6 +247,21 @@ _global.beforeEach(function() {
           }
         }
       };
+    },
+
+    toMatchPattern() {
+      return {compare: buildError(false), negativeCompare: buildError(true)};
+
+      function buildError(isNot) {
+        return function(actual, regex) {
+          return {
+            pass: regex.test(actual) == !isNot,
+            get message() {
+              return `Expected ${actual} ${isNot ? 'not ' : ''}to match ${regex.toString()}`;
+            }
+          };
+        };
+      }
     },
 
     toImplement: function() {

@@ -1,4 +1,5 @@
 import {Headers} from 'angular2/src/http/headers';
+import {Json} from 'angular2/src/facade/lang';
 import {Map, StringMapWrapper} from 'angular2/src/facade/collection';
 import {
   AsyncTestCompleter,
@@ -61,6 +62,61 @@ export function main() {
         expect(/bar, ?baz/g.test(headers.get('foo'))).toBe(true);
         expect(/bar, ?baz/g.test(headers.getAll('foo')[0])).toBe(true);
       });
+    });
+
+
+    describe('.toJSON()', () => {
+      let headers = null;
+      let inputArr = null;
+      let obj = null;
+
+      beforeEach(() => {
+        headers = new Headers();
+        inputArr = ['application/jeisen', 'application/jason', 'application/patrickjs'];
+        obj = {'Accept': inputArr};
+        headers.set('Accept', inputArr);
+      });
+
+
+      it('should be serializable with toJSON', () => {
+        let stringifed = Json.stringify(obj);
+        let serializedHeaders = Json.stringify(headers);
+        expect(serializedHeaders).toEqual(stringifed);
+      });
+
+
+      it('should be able to parse serialized header', () => {
+        let stringifed = Json.stringify(obj);
+        let serializedHeaders = Json.stringify(headers);
+        expect(Json.parse(serializedHeaders)).toEqual(Json.parse(stringifed));
+      });
+
+
+      it('should be able to recreate serializedHeaders', () => {
+        let serializedHeaders = Json.stringify(headers);
+        let parsedHeaders = Json.parse(serializedHeaders);
+        let recreatedHeaders = new Headers(parsedHeaders);
+        expect(Json.stringify(parsedHeaders)).toEqual(Json.stringify(recreatedHeaders));
+      });
+    });
+  });
+
+  describe('.fromResponseHeaderString()', () => {
+
+    it('should parse a response header string', () => {
+
+      let responseHeaderString = `Date: Fri, 20 Nov 2015 01:45:26 GMT
+        Content-Type: application/json; charset=utf-8
+        Transfer-Encoding: chunked
+        Connection: keep-alive`;
+
+      let responseHeaders = Headers.fromResponseHeaderString(responseHeaderString);
+
+      expect(responseHeaders.get('Date')).toEqual('Fri, 20 Nov 2015 01:45:26 GMT');
+      expect(responseHeaders.get('Content-Type')).toEqual('application/json; charset=utf-8');
+      expect(responseHeaders.get('Transfer-Encoding')).toEqual('chunked');
+      expect(responseHeaders.get('Connection')).toEqual('keep-alive');
+
     });
   });
 }

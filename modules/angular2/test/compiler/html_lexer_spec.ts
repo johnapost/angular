@@ -53,26 +53,38 @@ export function main() {
               [HtmlTokenType.EOF, '2:5']
             ]);
       });
+
+      it('should work with CR and LF', () => {
+        expect(tokenizeAndHumanizeLineColumn('<t\n>\r\na\r</t>'))
+            .toEqual([
+              [HtmlTokenType.TAG_OPEN_START, '0:0'],
+              [HtmlTokenType.TAG_OPEN_END, '1:0'],
+              [HtmlTokenType.TEXT, '1:1'],
+              [HtmlTokenType.TAG_CLOSE, '2:1'],
+              [HtmlTokenType.EOF, '2:5']
+            ]);
+      });
     });
 
     describe('comments', () => {
       it('should parse comments', () => {
-        expect(tokenizeAndHumanizeParts('<!--test-->'))
+        expect(tokenizeAndHumanizeParts('<!--t\ne\rs\r\nt-->'))
             .toEqual([
               [HtmlTokenType.COMMENT_START],
-              [HtmlTokenType.RAW_TEXT, 'test'],
+              [HtmlTokenType.RAW_TEXT, 't\ne\ns\nt'],
               [HtmlTokenType.COMMENT_END],
               [HtmlTokenType.EOF]
             ]);
       });
 
-      it('should store the locations', () => {expect(tokenizeAndHumanizeSourceSpans('<!--test-->'))
-                                                  .toEqual([
-                                                    [HtmlTokenType.COMMENT_START, '<!--'],
-                                                    [HtmlTokenType.RAW_TEXT, 'test'],
-                                                    [HtmlTokenType.COMMENT_END, '-->'],
-                                                    [HtmlTokenType.EOF, '']
-                                                  ])});
+      it('should store the locations',
+         () => {expect(tokenizeAndHumanizeSourceSpans('<!--t\ne\rs\r\nt-->'))
+                    .toEqual([
+                      [HtmlTokenType.COMMENT_START, '<!--'],
+                      [HtmlTokenType.RAW_TEXT, 't\ne\rs\r\nt'],
+                      [HtmlTokenType.COMMENT_END, '-->'],
+                      [HtmlTokenType.EOF, '']
+                    ])});
 
       it('should report <!- without -', () => {
         expect(tokenizeAndHumanizeErrors('<!-a'))
@@ -102,34 +114,34 @@ export function main() {
       });
     });
 
-    describe('cdata', () => {
-      it('should parse cdata', () => {
-        expect(tokenizeAndHumanizeParts('<![cdata[test]]>'))
+    describe('CDATA', () => {
+      it('should parse CDATA', () => {
+        expect(tokenizeAndHumanizeParts('<![CDATA[t\ne\rs\r\nt]]>'))
             .toEqual([
               [HtmlTokenType.CDATA_START],
-              [HtmlTokenType.RAW_TEXT, 'test'],
+              [HtmlTokenType.RAW_TEXT, 't\ne\ns\nt'],
               [HtmlTokenType.CDATA_END],
               [HtmlTokenType.EOF]
             ]);
       });
 
       it('should store the locations', () => {
-        expect(tokenizeAndHumanizeSourceSpans('<![cdata[test]]>'))
+        expect(tokenizeAndHumanizeSourceSpans('<![CDATA[t\ne\rs\r\nt]]>'))
             .toEqual([
-              [HtmlTokenType.CDATA_START, '<![cdata['],
-              [HtmlTokenType.RAW_TEXT, 'test'],
+              [HtmlTokenType.CDATA_START, '<![CDATA['],
+              [HtmlTokenType.RAW_TEXT, 't\ne\rs\r\nt'],
               [HtmlTokenType.CDATA_END, ']]>'],
               [HtmlTokenType.EOF, '']
             ]);
       });
 
-      it('should report <![ without cdata[', () => {
+      it('should report <![ without CDATA[', () => {
         expect(tokenizeAndHumanizeErrors('<![a'))
             .toEqual([[HtmlTokenType.CDATA_START, 'Unexpected character "a"', '0:3']]);
       });
 
       it('should report missing end cdata', () => {
-        expect(tokenizeAndHumanizeErrors('<![cdata['))
+        expect(tokenizeAndHumanizeErrors('<![CDATA['))
             .toEqual([[HtmlTokenType.RAW_TEXT, 'Unexpected character "EOF"', '0:9']]);
       });
     });
@@ -162,8 +174,8 @@ export function main() {
             ]);
       });
 
-      it('should allow whitespace', () => {
-        expect(tokenizeAndHumanizeParts('< test >'))
+      it('should allow whitespace after the tag name', () => {
+        expect(tokenizeAndHumanizeParts('<test >'))
             .toEqual([
               [HtmlTokenType.TAG_OPEN_START, null, 'test'],
               [HtmlTokenType.TAG_OPEN_END],
@@ -180,15 +192,6 @@ export function main() {
             ]);
       });
 
-      it('should report missing name after <', () => {
-        expect(tokenizeAndHumanizeErrors('<'))
-            .toEqual([[HtmlTokenType.TAG_OPEN_START, 'Unexpected character "EOF"', '0:1']]);
-      });
-
-      it('should report missing >', () => {
-        expect(tokenizeAndHumanizeErrors('<name'))
-            .toEqual([[HtmlTokenType.TAG_OPEN_START, 'Unexpected character "EOF"', '0:5']]);
-      });
     });
 
     describe('attributes', () => {
@@ -301,6 +304,17 @@ export function main() {
             ]);
       });
 
+      it('should parse values with CR and LF', () => {
+        expect(tokenizeAndHumanizeParts("<t a='t\ne\rs\r\nt'>"))
+            .toEqual([
+              [HtmlTokenType.TAG_OPEN_START, null, 't'],
+              [HtmlTokenType.ATTR_NAME, null, 'a'],
+              [HtmlTokenType.ATTR_VALUE, 't\ne\ns\nt'],
+              [HtmlTokenType.TAG_OPEN_END],
+              [HtmlTokenType.EOF]
+            ]);
+      });
+
       it('should store the locations', () => {
         expect(tokenizeAndHumanizeSourceSpans('<t a=b>'))
             .toEqual([
@@ -312,20 +326,6 @@ export function main() {
             ]);
       });
 
-      it('should report missing value after =', () => {
-        expect(tokenizeAndHumanizeErrors('<name a='))
-            .toEqual([[HtmlTokenType.ATTR_VALUE, 'Unexpected character "EOF"', '0:8']]);
-      });
-
-      it('should report missing end quote for \'', () => {
-        expect(tokenizeAndHumanizeErrors('<name a=\''))
-            .toEqual([[HtmlTokenType.ATTR_VALUE, 'Unexpected character "EOF"', '0:9']]);
-      });
-
-      it('should report missing end quote for "', () => {
-        expect(tokenizeAndHumanizeErrors('<name a="'))
-            .toEqual([[HtmlTokenType.ATTR_VALUE, 'Unexpected character "EOF"', '0:9']]);
-      });
     });
 
     describe('closing tags', () => {
@@ -367,8 +367,8 @@ export function main() {
       });
 
       it('should parse hexadecimal entities', () => {
-        expect(tokenizeAndHumanizeParts('&#x41;'))
-            .toEqual([[HtmlTokenType.TEXT, 'A'], [HtmlTokenType.EOF]]);
+        expect(tokenizeAndHumanizeParts('&#x41;&#X41;'))
+            .toEqual([[HtmlTokenType.TEXT, 'AA'], [HtmlTokenType.EOF]]);
       });
 
       it('should parse decimal entities', () => {
@@ -406,6 +406,11 @@ export function main() {
             .toEqual([[HtmlTokenType.TEXT, 'a'], [HtmlTokenType.EOF]]);
       });
 
+      it('should handle CR & LF', () => {
+        expect(tokenizeAndHumanizeParts('t\ne\rs\r\nt'))
+            .toEqual([[HtmlTokenType.TEXT, 't\ne\ns\nt'], [HtmlTokenType.EOF]]);
+      });
+
       it('should parse entities', () => {
         expect(tokenizeAndHumanizeParts('a&amp;b'))
             .toEqual([[HtmlTokenType.TEXT, 'a&b'], [HtmlTokenType.EOF]]);
@@ -420,22 +425,55 @@ export function main() {
         expect(tokenizeAndHumanizeSourceSpans('a'))
             .toEqual([[HtmlTokenType.TEXT, 'a'], [HtmlTokenType.EOF, '']]);
       });
+
+      it('should allow "<" in text nodes', () => {
+        expect(tokenizeAndHumanizeParts('{{ a < b ? c : d }}'))
+            .toEqual([[HtmlTokenType.TEXT, '{{ a < b ? c : d }}'], [HtmlTokenType.EOF]]);
+
+        expect(tokenizeAndHumanizeSourceSpans('<p>a<b</p>'))
+            .toEqual([
+              [HtmlTokenType.TAG_OPEN_START, '<p'],
+              [HtmlTokenType.TAG_OPEN_END, '>'],
+              [HtmlTokenType.TEXT, 'a<b'],
+              [HtmlTokenType.TAG_CLOSE, '</p>'],
+              [HtmlTokenType.EOF, ''],
+            ]);
+
+        expect(tokenizeAndHumanizeParts('< a>'))
+            .toEqual([[HtmlTokenType.TEXT, '< a>'], [HtmlTokenType.EOF]]);
+      });
+
+      // TODO(vicb): make the lexer aware of Angular expressions
+      // see https://github.com/angular/angular/issues/5679
+      it('should parse valid start tag in interpolation', () => {
+        expect(tokenizeAndHumanizeParts('{{ a <b && c > d }}'))
+            .toEqual([
+              [HtmlTokenType.TEXT, '{{ a '],
+              [HtmlTokenType.TAG_OPEN_START, null, 'b'],
+              [HtmlTokenType.ATTR_NAME, null, '&&'],
+              [HtmlTokenType.ATTR_NAME, null, 'c'],
+              [HtmlTokenType.TAG_OPEN_END],
+              [HtmlTokenType.TEXT, ' d }}'],
+              [HtmlTokenType.EOF]
+            ]);
+      });
+
     });
 
     describe('raw text', () => {
       it('should parse text', () => {
-        expect(tokenizeAndHumanizeParts(`<script>a</script>`))
+        expect(tokenizeAndHumanizeParts(`<script>t\ne\rs\r\nt</script>`))
             .toEqual([
               [HtmlTokenType.TAG_OPEN_START, null, 'script'],
               [HtmlTokenType.TAG_OPEN_END],
-              [HtmlTokenType.RAW_TEXT, 'a'],
+              [HtmlTokenType.RAW_TEXT, 't\ne\ns\nt'],
               [HtmlTokenType.TAG_CLOSE, null, 'script'],
               [HtmlTokenType.EOF]
             ]);
       });
 
       it('should not detect entities', () => {
-        expect(tokenizeAndHumanizeParts(`<script>&amp;</script>`))
+        expect(tokenizeAndHumanizeParts(`<script>&amp;</SCRIPT>`))
             .toEqual([
               [HtmlTokenType.TAG_OPEN_START, null, 'script'],
               [HtmlTokenType.TAG_OPEN_END],
@@ -482,11 +520,11 @@ export function main() {
 
     describe('escapable raw text', () => {
       it('should parse text', () => {
-        expect(tokenizeAndHumanizeParts(`<title>a</title>`))
+        expect(tokenizeAndHumanizeParts(`<title>t\ne\rs\r\nt</title>`))
             .toEqual([
               [HtmlTokenType.TAG_OPEN_START, null, 'title'],
               [HtmlTokenType.TAG_OPEN_END],
-              [HtmlTokenType.ESCAPABLE_RAW_TEXT, 'a'],
+              [HtmlTokenType.ESCAPABLE_RAW_TEXT, 't\ne\ns\nt'],
               [HtmlTokenType.TAG_CLOSE, null, 'title'],
               [HtmlTokenType.EOF]
             ]);
@@ -543,9 +581,23 @@ export function main() {
         let src = "111\n222\n333\nE\n444\n555\n666\n";
         let file = new ParseSourceFile(src, 'file://');
         let location = new ParseLocation(file, 12, 123, 456);
-        let error = new HtmlTokenError('**ERROR**', null, location);
+        let span = new ParseSourceSpan(location, location);
+        let error = new HtmlTokenError('**ERROR**', null, span);
         expect(error.toString())
             .toEqual(`**ERROR** ("\n222\n333\n[ERROR ->]E\n444\n555\n"): file://@123:456`);
+      });
+    });
+
+    describe('unicode characters', () => {
+      it('should support unicode characters', () => {
+        expect(tokenizeAndHumanizeSourceSpans(`<p>İ</p>`))
+            .toEqual([
+              [HtmlTokenType.TAG_OPEN_START, '<p'],
+              [HtmlTokenType.TAG_OPEN_END, '>'],
+              [HtmlTokenType.TEXT, 'İ'],
+              [HtmlTokenType.TAG_CLOSE, '</p>'],
+              [HtmlTokenType.EOF, '']
+            ]);
       });
     });
 
@@ -580,7 +632,9 @@ function tokenizeAndHumanizeLineColumn(input: string): any[] {
 
 function tokenizeAndHumanizeErrors(input: string): any[] {
   return tokenizeHtml(input, 'someUrl')
-      .errors.map(
-          tokenError =>
-              [<any>tokenError.tokenType, tokenError.msg, humanizeLineColumn(tokenError.location)]);
+      .errors.map(tokenError => [
+        <any>tokenError.tokenType,
+        tokenError.msg,
+        humanizeLineColumn(tokenError.span.start)
+      ]);
 }

@@ -10,7 +10,7 @@ import {
   it,
 } from 'angular2/testing_internal';
 import {MockXHR} from 'angular2/src/compiler/xhr_mock';
-import {PromiseWrapper, Promise} from 'angular2/src/facade/async';
+import {PromiseWrapper} from 'angular2/src/facade/async';
 import {isPresent} from 'angular2/src/facade/lang';
 
 export function main() {
@@ -101,7 +101,7 @@ export function main() {
     it('should throw when flush is called without any pending requests',
        () => { expect(() => { xhr.flush(); }).toThrowError('No pending requests to flush'); });
 
-    it('should throw on unstatisfied expectations', () => {
+    it('should throw on unsatisfied expectations', () => {
       xhr.expect('/foo', 'bar');
       xhr.when('/bar', 'foo');
       xhr.get('/bar');

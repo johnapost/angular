@@ -1,10 +1,10 @@
 import {isBlank, isPresent, isPromise, CONST} from 'angular2/src/facade/lang';
-import {Promise, ObservableWrapper, Observable, EventEmitter} from 'angular2/src/facade/async';
+import {ObservableWrapper, Observable, EventEmitter} from 'angular2/src/facade/async';
 import {
   Pipe,
   Injectable,
   ChangeDetectorRef,
-  PipeOnDestroy,
+  OnDestroy,
   PipeTransform,
   WrappedValue
 } from 'angular2/core';
@@ -22,7 +22,7 @@ class ObservableStrategy {
 }
 
 class PromiseStrategy {
-  createSubscription(async: any, updateLatestValue: any): any {
+  createSubscription(async: Promise<any>, updateLatestValue: (v: any) => any): any {
     return async.then(updateLatestValue);
   }
 
@@ -33,7 +33,7 @@ class PromiseStrategy {
 
 var _promiseStrategy = new PromiseStrategy();
 var _observableStrategy = new ObservableStrategy();
-
+var __unused: Promise<any>;  // avoid unused import when Promise union types are erased
 
 /**
  * The `async` pipe subscribes to an Observable or Promise and returns the latest value it has
@@ -55,7 +55,7 @@ var _observableStrategy = new ObservableStrategy();
  */
 @Pipe({name: 'async', pure: false})
 @Injectable()
-export class AsyncPipe implements PipeTransform, PipeOnDestroy {
+export class AsyncPipe implements PipeTransform, OnDestroy {
   /** @internal */
   _latestValue: Object = null;
   /** @internal */
@@ -70,7 +70,7 @@ export class AsyncPipe implements PipeTransform, PipeOnDestroy {
   public _ref: ChangeDetectorRef;
   constructor(_ref: ChangeDetectorRef) { this._ref = _ref; }
 
-  onDestroy(): void {
+  ngOnDestroy(): void {
     if (isPresent(this._subscription)) {
       this._dispose();
     }
@@ -81,7 +81,8 @@ export class AsyncPipe implements PipeTransform, PipeOnDestroy {
       if (isPresent(obj)) {
         this._subscribe(obj);
       }
-      return null;
+      this._latestReturnedValue = this._latestValue;
+      return this._latestValue;
     }
 
     if (obj !== this._obj) {
@@ -101,8 +102,8 @@ export class AsyncPipe implements PipeTransform, PipeOnDestroy {
   _subscribe(obj: Observable<any>| Promise<any>| EventEmitter<any>): void {
     this._obj = obj;
     this._strategy = this._selectStrategy(obj);
-    this._subscription =
-        this._strategy.createSubscription(obj, value => this._updateLatestValue(obj, value));
+    this._subscription = this._strategy.createSubscription(
+        obj, (value: Object) => this._updateLatestValue(obj, value));
   }
 
   /** @internal */

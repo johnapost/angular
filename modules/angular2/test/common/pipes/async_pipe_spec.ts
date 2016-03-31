@@ -23,6 +23,7 @@ import {
   TimerWrapper
 } from 'angular2/src/facade/async';
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
+import {PromiseCompleter} from 'angular2/src/facade/promise';
 
 export function main() {
   describe("AsyncPipe", () => {
@@ -92,17 +93,17 @@ export function main() {
              TimerWrapper.setTimeout(() => {
                expect(ref.spy('markForCheck')).toHaveBeenCalled();
                async.done();
-             }, 0)
+             }, 10)
            }));
       });
 
-      describe("onDestroy", () => {
+      describe("ngOnDestroy", () => {
         it("should do nothing when no subscription",
-           () => { expect(() => pipe.onDestroy()).not.toThrow(); });
+           () => { expect(() => pipe.ngOnDestroy()).not.toThrow(); });
 
         it("should dispose of the existing subscription", inject([AsyncTestCompleter], (async) => {
              pipe.transform(emitter);
-             pipe.onDestroy();
+             pipe.ngOnDestroy();
 
              ObservableWrapper.callEmit(emitter, message);
 
@@ -116,16 +117,16 @@ export function main() {
 
     describe("Promise", () => {
       var message = new Object();
-      var pipe;
-      var completer;
-      var ref;
+      var pipe: AsyncPipe;
+      var completer: PromiseCompleter<any>;
+      var ref: SpyChangeDetectorRef;
       // adds longer timers for passing tests in IE
-      var timer = (!isBlank(DOM) && browserDetection.isIE) ? 50 : 0;
+      var timer = (!isBlank(DOM) && browserDetection.isIE) ? 50 : 10;
 
       beforeEach(() => {
         completer = PromiseWrapper.completer();
         ref = new SpyChangeDetectorRef();
-        pipe = new AsyncPipe(ref);
+        pipe = new AsyncPipe(<any>ref);
       });
 
       describe("transform", () => {
@@ -173,18 +174,19 @@ export function main() {
 
         it("should request a change detection check upon receiving a new value",
            inject([AsyncTestCompleter], (async) => {
+             var markForCheck = ref.spy('markForCheck');
              pipe.transform(completer.promise);
              completer.resolve(message);
 
              TimerWrapper.setTimeout(() => {
-               expect(ref.spy('markForCheck')).toHaveBeenCalled();
+               expect(markForCheck).toHaveBeenCalled();
                async.done();
              }, timer)
            }));
 
-        describe("onDestroy", () => {
+        describe("ngOnDestroy", () => {
           it("should do nothing when no source",
-             () => { expect(() => pipe.onDestroy()).not.toThrow(); });
+             () => { expect(() => pipe.ngOnDestroy()).not.toThrow(); });
 
           it("should dispose of the existing source", inject([AsyncTestCompleter], (async) => {
                pipe.transform(completer.promise);
@@ -194,7 +196,7 @@ export function main() {
 
                    TimerWrapper.setTimeout(() => {
                      expect(pipe.transform(completer.promise)).toEqual(new WrappedValue(message));
-                     pipe.onDestroy();
+                     pipe.ngOnDestroy();
                      expect(pipe.transform(completer.promise)).toBe(null);
                      async.done();
                    }, timer);

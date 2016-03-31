@@ -1,4 +1,4 @@
-import {bootstrap} from 'angular2/bootstrap';
+import {bootstrap} from 'angular2/platform/browser';
 import {Renderer, ElementRef, Component, Directive, Injectable} from 'angular2/core';
 
 export function main() {
@@ -24,7 +24,9 @@ class GreetingService {
 class RedDec {
   // ElementRef is always injectable and it wraps the element on which the
   // directive was found by the compiler.
-  constructor(el: ElementRef, renderer: Renderer) { renderer.setElementStyle(el, 'color', 'red'); }
+  constructor(el: ElementRef, renderer: Renderer) {
+    renderer.setElementStyle(el.nativeElement, 'color', 'red');
+  }
 }
 
 // Angular 2.0 supports 2 basic types of directives:

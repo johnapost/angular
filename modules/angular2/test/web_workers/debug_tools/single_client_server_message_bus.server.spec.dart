@@ -2,24 +2,28 @@ library angular2.test.web_workers.debug_tools.single_client_server_message_bus;
 
 import "dart:io";
 import "dart:async";
-import "package:angular2/testing_internal.dart"
+import "package:angular2/src/testing/testing_internal_core.dart"
     show
         AsyncTestCompleter,
-        inject,
-        describe,
-        it,
-        expect,
-        beforeEach,
-        createTestInjector,
-        beforeEachBindings,
         SpyObject,
-        proxy;
+        beforeEach,
+        beforeEachProviders,
+        describe,
+        expect,
+        inject,
+        it,
+        proxy,
+        testSetup;
+import 'package:angular2/src/platform/server/html_adapter.dart';
 import "package:angular2/src/web_workers/debug_tools/single_client_server_message_bus.dart";
 import "./message_bus_common.dart";
 import "./spy_web_socket.dart";
 import "dart:convert" show JSON;
 
 main() {
+  Html5LibDomAdapter.makeCurrent();
+  testSetup();
+
   var MESSAGE = const {'test': 10};
   const CHANNEL = "TEST_CHANNEL";
   describe("SingleClientServerMessageBusSink", () {

@@ -1,5 +1,5 @@
 import {ListWrapper, Map, MapWrapper, StringMapWrapper} from 'angular2/src/facade/collection';
-import {Promise, PromiseWrapper} from 'angular2/src/facade/async';
+import {PromiseWrapper} from 'angular2/src/facade/async';
 import {
   isPresent,
   isArray,
@@ -7,13 +7,16 @@ import {
   isType,
   isString,
   isStringMap,
-  isFunction,
-  StringWrapper,
   Type,
-  getTypeNameForDebugging
+  StringWrapper,
+  Math,
+  getTypeNameForDebugging,
+  CONST_EXPR
 } from 'angular2/src/facade/lang';
 import {BaseException, WrappedException} from 'angular2/src/facade/exceptions';
 import {reflector} from 'angular2/src/core/reflection/reflection';
+import {Injectable, Inject, OpaqueToken} from 'angular2/core';
+
 import {
   RouteConfig,
   AsyncRoute,
@@ -21,9 +24,9 @@ import {
   AuxRoute,
   Redirect,
   RouteDefinition
-} from './route_config_impl';
-import {PathMatch, RedirectMatch, RouteMatch} from './route_recognizer';
-import {ComponentRecognizer} from './component_recognizer';
+} from './route_config/route_config_impl';
+import {PathMatch, RedirectMatch, RouteMatch} from './rules/rules';
+import {RuleSet} from './rules/rule_set';
 import {
   Instruction,
   ResolvedInstruction,
@@ -32,11 +35,50 @@ import {
   DefaultInstruction
 } from './instruction';
 
-import {Injectable} from 'angular2/angular2';
-import {normalizeRouteConfig, assertComponentExists} from './route_config_nomalizer';
-import {parser, Url, pathSegmentsToUrl} from './url_parser';
+import {normalizeRouteConfig, assertComponentExists} from './route_config/route_config_normalizer';
+import {parser, Url, convertUrlParamsToArray, pathSegmentsToUrl} from './url_parser';
+import {GeneratedUrl} from './rules/route_paths/route_path';
 
-var _resolveToNull = PromiseWrapper.resolve(null);
+var _resolveToNull = PromiseWrapper.resolve<Instruction>(null);
+
+// A LinkItemArray is an array, which describes a set of routes
+// The items in the array are found in groups:
+// - the first item is the name of the route
+// - the next items are:
+//   - an object containing parameters
+//   - or an array describing an aux route
+// export type LinkRouteItem = string | Object;
+// export type LinkItem = LinkRouteItem | Array<LinkRouteItem>;
+// export type LinkItemArray = Array<LinkItem>;
+
+/**
+ * Token used to bind the component with the top-level {@link RouteConfig}s for the
+ * application.
+ *
+ * ### Example ([live demo](http://plnkr.co/edit/iRUP8B5OUbxCWQ3AcIDm))
+ *
+ * ```
+ * import {Component} from 'angular2/core';
+ * import {
+ *   ROUTER_DIRECTIVES,
+ *   ROUTER_PROVIDERS,
+ *   RouteConfig
+ * } from 'angular2/router';
+ *
+ * @Component({directives: [ROUTER_DIRECTIVES]})
+ * @RouteConfig([
+ *  {...},
+ * ])
+ * class AppCmp {
+ *   // ...
+ * }
+ *
+ * bootstrap(AppCmp, [ROUTER_PROVIDERS]);
+ * ```
+ */
+export const ROUTER_PRIMARY_COMPONENT: OpaqueToken =
+    CONST_EXPR(new OpaqueToken('RouterPrimaryComponent'));
+
 
 /**
  * The RouteRegistry holds route configurations for each component in an Angular app.
@@ -45,7 +87,9 @@ var _resolveToNull = PromiseWrapper.resolve(null);
  */
 @Injectable()
 export class RouteRegistry {
-  private _rules = new Map<any, ComponentRecognizer>();
+  private _rules = new Map<any, RuleSet>();
+
+  constructor(@Inject(ROUTER_PRIMARY_COMPONENT) private _rootComponent: Type) {}
 
   /**
    * Given a component and a configuration object, add the route to this registry
@@ -60,14 +104,14 @@ export class RouteRegistry {
       assertComponentExists(config.component, config.path);
     }
 
-    var recognizer: ComponentRecognizer = this._rules.get(parentComponent);
+    var rules = this._rules.get(parentComponent);
 
-    if (isBlank(recognizer)) {
-      recognizer = new ComponentRecognizer();
-      this._rules.set(parentComponent, recognizer);
+    if (isBlank(rules)) {
+      rules = new RuleSet();
+      this._rules.set(parentComponent, rules);
     }
 
-    var terminal = recognizer.config(config);
+    var terminal = rules.config(config);
 
     if (config instanceof Route) {
       if (terminal) {
@@ -109,43 +153,48 @@ export class RouteRegistry {
    * Given a URL and a parent component, return the most specific instruction for navigating
    * the application into the state specified by the url
    */
-  recognize(url: string, ancestorComponents: any[]): Promise<Instruction> {
+  recognize(url: string, ancestorInstructions: Instruction[]): Promise<Instruction> {
     var parsedUrl = parser.parse(url);
-    return this._recognize(parsedUrl, ancestorComponents);
+    return this._recognize(parsedUrl, []);
   }
 
 
   /**
    * Recognizes all parent-child routes, but creates unresolved auxiliary routes
    */
-
-  private _recognize(parsedUrl: Url, ancestorComponents: any[],
+  private _recognize(parsedUrl: Url, ancestorInstructions: Instruction[],
                      _aux = false): Promise<Instruction> {
-    var parentComponent = ancestorComponents[ancestorComponents.length - 1];
-    var componentRecognizer = this._rules.get(parentComponent);
-    if (isBlank(componentRecognizer)) {
+    var parentInstruction = ListWrapper.last(ancestorInstructions);
+    var parentComponent = isPresent(parentInstruction) ? parentInstruction.component.componentType :
+                                                         this._rootComponent;
+
+    var rules = this._rules.get(parentComponent);
+    if (isBlank(rules)) {
       return _resolveToNull;
     }
 
     // Matches some beginning part of the given URL
     var possibleMatches: Promise<RouteMatch>[] =
-        _aux ? componentRecognizer.recognizeAuxiliary(parsedUrl) :
-               componentRecognizer.recognize(parsedUrl);
+        _aux ? rules.recognizeAuxiliary(parsedUrl) : rules.recognize(parsedUrl);
 
     var matchPromises: Promise<Instruction>[] = possibleMatches.map(
         (candidate: Promise<RouteMatch>) => candidate.then((candidate: RouteMatch) => {
 
           if (candidate instanceof PathMatch) {
-            if (candidate.instruction.terminal) {
-              var unresolvedAux =
-                  this._auxRoutesToUnresolved(candidate.remainingAux, parentComponent);
-              return new ResolvedInstruction(candidate.instruction, null, unresolvedAux);
+            var auxParentInstructions: Instruction[] =
+                ancestorInstructions.length > 0 ? [ListWrapper.last(ancestorInstructions)] : [];
+            var auxInstructions =
+                this._auxRoutesToUnresolved(candidate.remainingAux, auxParentInstructions);
+
+            var instruction = new ResolvedInstruction(candidate.instruction, null, auxInstructions);
+
+            if (isBlank(candidate.instruction) || candidate.instruction.terminal) {
+              return instruction;
             }
 
-            var newAncestorComponents =
-                ancestorComponents.concat([candidate.instruction.componentType]);
+            var newAncestorInstructions: Instruction[] = ancestorInstructions.concat([instruction]);
 
-            return this._recognize(candidate.remaining, newAncestorComponents)
+            return this._recognize(candidate.remaining, newAncestorInstructions)
                 .then((childInstruction) => {
                   if (isBlank(childInstruction)) {
                     return null;
@@ -155,17 +204,16 @@ export class RouteRegistry {
                   if (childInstruction instanceof RedirectInstruction) {
                     return childInstruction;
                   }
-                  var unresolvedAux =
-                      this._auxRoutesToUnresolved(candidate.remainingAux, parentComponent);
-                  return new ResolvedInstruction(candidate.instruction, childInstruction,
-                                                 unresolvedAux);
+                  instruction.child = childInstruction;
+                  return instruction;
                 });
           }
 
           if (candidate instanceof RedirectMatch) {
-            var instruction = this.generate(candidate.redirectTo, ancestorComponents);
+            var instruction =
+                this.generate(candidate.redirectTo, ancestorInstructions.concat([null]));
             return new RedirectInstruction(instruction.component, instruction.child,
-                                           instruction.auxInstruction);
+                                           instruction.auxInstruction, candidate.specificity);
           }
         }));
 
@@ -173,15 +221,16 @@ export class RouteRegistry {
       return PromiseWrapper.resolve(this.generateDefault(parentComponent));
     }
 
-    return PromiseWrapper.all(matchPromises).then(mostSpecific);
+    return PromiseWrapper.all<Instruction>(matchPromises).then(mostSpecific);
   }
 
-  private _auxRoutesToUnresolved(auxRoutes: Url[], parentComponent): {[key: string]: Instruction} {
+  private _auxRoutesToUnresolved(auxRoutes: Url[],
+                                 parentInstructions: Instruction[]): {[key: string]: Instruction} {
     var unresolvedAuxInstructions: {[key: string]: Instruction} = {};
 
     auxRoutes.forEach((auxUrl: Url) => {
       unresolvedAuxInstructions[auxUrl.path] = new UnresolvedInstruction(
-          () => { return this._recognize(auxUrl, [parentComponent], true); });
+          () => { return this._recognize(auxUrl, parentInstructions, true); });
     });
 
     return unresolvedAuxInstructions;
@@ -195,157 +244,216 @@ export class RouteRegistry {
    * If the optional param `_aux` is `true`, then we generate starting at an auxiliary
    * route boundary.
    */
-  generate(linkParams: any[], ancestorComponents: any[], _aux = false): Instruction {
-    let parentComponent = ancestorComponents[ancestorComponents.length - 1];
-    let grandparentComponent =
-        ancestorComponents.length > 1 ? ancestorComponents[ancestorComponents.length - 2] : null;
-
-    let normalizedLinkParams = splitAndFlattenLinkParams(linkParams);
-
-    var first = ListWrapper.first(normalizedLinkParams);
-    var rest = ListWrapper.slice(normalizedLinkParams, 1);
+  generate(linkParams: any[], ancestorInstructions: Instruction[], _aux = false): Instruction {
+    var params = splitAndFlattenLinkParams(linkParams);
+    var prevInstruction;
 
     // The first segment should be either '.' (generate from parent) or '' (generate from root).
     // When we normalize above, we strip all the slashes, './' becomes '.' and '/' becomes ''.
-    if (first == '') {
-      var firstComponent = ancestorComponents[0];
-      ListWrapper.clear(ancestorComponents);
-      ancestorComponents.push(firstComponent);
-    } else if (first == '..') {
-      // we already captured the first instance of "..", so we need to pop off an ancestor
-      ancestorComponents.pop();
-      while (ListWrapper.first(rest) == '..') {
-        rest = ListWrapper.slice(rest, 1);
-        ancestorComponents.pop();
-        if (ancestorComponents.length <= 0) {
-          throw new BaseException(
-              `Link "${ListWrapper.toJSON(linkParams)}" has too many "../" segments.`);
+    if (ListWrapper.first(params) == '') {
+      params.shift();
+      prevInstruction = ListWrapper.first(ancestorInstructions);
+      ancestorInstructions = [];
+    } else {
+      prevInstruction = ancestorInstructions.length > 0 ? ancestorInstructions.pop() : null;
+
+      if (ListWrapper.first(params) == '.') {
+        params.shift();
+      } else if (ListWrapper.first(params) == '..') {
+        while (ListWrapper.first(params) == '..') {
+          if (ancestorInstructions.length <= 0) {
+            throw new BaseException(
+                `Link "${ListWrapper.toJSON(linkParams)}" has too many "../" segments.`);
+          }
+          prevInstruction = ancestorInstructions.pop();
+          params = ListWrapper.slice(params, 1);
+        }
+
+        // we're on to implicit child/sibling route
+      } else {
+        // we must only peak at the link param, and not consume it
+        let routeName = ListWrapper.first(params);
+        let parentComponentType = this._rootComponent;
+        let grandparentComponentType = null;
+
+        if (ancestorInstructions.length > 1) {
+          let parentComponentInstruction = ancestorInstructions[ancestorInstructions.length - 1];
+          let grandComponentInstruction = ancestorInstructions[ancestorInstructions.length - 2];
+
+          parentComponentType = parentComponentInstruction.component.componentType;
+          grandparentComponentType = grandComponentInstruction.component.componentType;
+        } else if (ancestorInstructions.length == 1) {
+          parentComponentType = ancestorInstructions[0].component.componentType;
+          grandparentComponentType = this._rootComponent;
+        }
+
+        // For a link with no leading `./`, `/`, or `../`, we look for a sibling and child.
+        // If both exist, we throw. Otherwise, we prefer whichever exists.
+        var childRouteExists = this.hasRoute(routeName, parentComponentType);
+        var parentRouteExists = isPresent(grandparentComponentType) &&
+                                this.hasRoute(routeName, grandparentComponentType);
+
+        if (parentRouteExists && childRouteExists) {
+          let msg =
+              `Link "${ListWrapper.toJSON(linkParams)}" is ambiguous, use "./" or "../" to disambiguate.`;
+          throw new BaseException(msg);
+        }
+
+        if (parentRouteExists) {
+          prevInstruction = ancestorInstructions.pop();
         }
       }
-    } else if (first != '.') {
-      // For a link with no leading `./`, `/`, or `../`, we look for a sibling and child.
-      // If both exist, we throw. Otherwise, we prefer whichever exists.
-      var childRouteExists = this.hasRoute(first, parentComponent);
-      var parentRouteExists =
-          isPresent(grandparentComponent) && this.hasRoute(first, grandparentComponent);
-
-      if (parentRouteExists && childRouteExists) {
-        let msg =
-            `Link "${ListWrapper.toJSON(linkParams)}" is ambiguous, use "./" or "../" to disambiguate.`;
-        throw new BaseException(msg);
-      }
-      if (parentRouteExists) {
-        ancestorComponents.pop();
-      }
-      rest = linkParams;
     }
 
-    if (rest[rest.length - 1] == '') {
-      rest.pop();
+    if (params[params.length - 1] == '') {
+      params.pop();
     }
 
-    if (rest.length < 1) {
+    if (params.length > 0 && params[0] == '') {
+      params.shift();
+    }
+
+    if (params.length < 1) {
       let msg = `Link "${ListWrapper.toJSON(linkParams)}" must include a route name.`;
       throw new BaseException(msg);
     }
 
-    return this._generate(rest, ancestorComponents, _aux);
+    var generatedInstruction =
+        this._generate(params, ancestorInstructions, prevInstruction, _aux, linkParams);
+
+    // we don't clone the first (root) element
+    for (var i = ancestorInstructions.length - 1; i >= 0; i--) {
+      let ancestorInstruction = ancestorInstructions[i];
+      if (isBlank(ancestorInstruction)) {
+        break;
+      }
+      generatedInstruction = ancestorInstruction.replaceChild(generatedInstruction);
+    }
+
+    return generatedInstruction;
   }
 
 
   /*
-   * Internal helper that does not make any assertions about the beginning of the link DSL
+   * Internal helper that does not make any assertions about the beginning of the link DSL.
+   * `ancestorInstructions` are parents that will be cloned.
+   * `prevInstruction` is the existing instruction that would be replaced, but which might have
+   * aux routes that need to be cloned.
    */
-  private _generate(linkParams: any[], ancestorComponents: any[], _aux = false): Instruction {
-    let parentComponent = ancestorComponents[ancestorComponents.length - 1];
+  private _generate(linkParams: any[], ancestorInstructions: Instruction[],
+                    prevInstruction: Instruction, _aux = false, _originalLink: any[]): Instruction {
+    let parentComponentType = this._rootComponent;
+    let componentInstruction = null;
+    let auxInstructions: {[key: string]: Instruction} = {};
+
+    let parentInstruction: Instruction = ListWrapper.last(ancestorInstructions);
+    if (isPresent(parentInstruction) && isPresent(parentInstruction.component)) {
+      parentComponentType = parentInstruction.component.componentType;
+    }
 
     if (linkParams.length == 0) {
-      return this.generateDefault(parentComponent);
-    }
-    let linkIndex = 0;
-    let routeName = linkParams[linkIndex];
-
-    if (!isString(routeName)) {
-      throw new BaseException(`Unexpected segment "${routeName}" in link DSL. Expected a string.`);
-    } else if (routeName == '' || routeName == '.' || routeName == '..') {
-      throw new BaseException(`"${routeName}/" is only allowed at the beginning of a link DSL.`);
-    }
-
-    let params = {};
-    if (linkIndex + 1 < linkParams.length) {
-      let nextSegment = linkParams[linkIndex + 1];
-      if (isStringMap(nextSegment) && !isArray(nextSegment)) {
-        params = nextSegment;
-        linkIndex += 1;
+      let defaultInstruction = this.generateDefault(parentComponentType);
+      if (isBlank(defaultInstruction)) {
+        throw new BaseException(
+            `Link "${ListWrapper.toJSON(_originalLink)}" does not resolve to a terminal instruction.`);
       }
+      return defaultInstruction;
     }
 
-    let auxInstructions: {[key: string]: Instruction} = {};
-    var nextSegment;
-    while (linkIndex + 1 < linkParams.length && isArray(nextSegment = linkParams[linkIndex + 1])) {
-      let auxInstruction = this._generate(nextSegment, [parentComponent], true);
+    // for non-aux routes, we want to reuse the predecessor's existing primary and aux routes
+    // and only override routes for which the given link DSL provides
+    if (isPresent(prevInstruction) && !_aux) {
+      auxInstructions = StringMapWrapper.merge(prevInstruction.auxInstruction, auxInstructions);
+      componentInstruction = prevInstruction.component;
+    }
+
+    var rules = this._rules.get(parentComponentType);
+    if (isBlank(rules)) {
+      throw new BaseException(
+          `Component "${getTypeNameForDebugging(parentComponentType)}" has no route config.`);
+    }
+
+    let linkParamIndex = 0;
+    let routeParams: {[key: string]: any} = {};
+
+    // first, recognize the primary route if one is provided
+    if (linkParamIndex < linkParams.length && isString(linkParams[linkParamIndex])) {
+      let routeName = linkParams[linkParamIndex];
+      if (routeName == '' || routeName == '.' || routeName == '..') {
+        throw new BaseException(`"${routeName}/" is only allowed at the beginning of a link DSL.`);
+      }
+      linkParamIndex += 1;
+      if (linkParamIndex < linkParams.length) {
+        let linkParam = linkParams[linkParamIndex];
+        if (isStringMap(linkParam) && !isArray(linkParam)) {
+          routeParams = linkParam;
+          linkParamIndex += 1;
+        }
+      }
+      var routeRecognizer = (_aux ? rules.auxRulesByName : rules.rulesByName).get(routeName);
+
+      if (isBlank(routeRecognizer)) {
+        throw new BaseException(
+            `Component "${getTypeNameForDebugging(parentComponentType)}" has no route named "${routeName}".`);
+      }
+
+      // Create an "unresolved instruction" for async routes
+      // we'll figure out the rest of the route when we resolve the instruction and
+      // perform a navigation
+      if (isBlank(routeRecognizer.handler.componentType)) {
+        var generatedUrl: GeneratedUrl = routeRecognizer.generateComponentPathValues(routeParams);
+        return new UnresolvedInstruction(() => {
+          return routeRecognizer.handler.resolveComponentType().then((_) => {
+            return this._generate(linkParams, ancestorInstructions, prevInstruction, _aux,
+                                  _originalLink);
+          });
+        }, generatedUrl.urlPath, convertUrlParamsToArray(generatedUrl.urlParams));
+      }
+
+      componentInstruction = _aux ? rules.generateAuxiliary(routeName, routeParams) :
+                                    rules.generate(routeName, routeParams);
+    }
+
+    // Next, recognize auxiliary instructions.
+    // If we have an ancestor instruction, we preserve whatever aux routes are active from it.
+    while (linkParamIndex < linkParams.length && isArray(linkParams[linkParamIndex])) {
+      let auxParentInstruction: Instruction[] = [parentInstruction];
+      let auxInstruction = this._generate(linkParams[linkParamIndex], auxParentInstruction, null,
+                                          true, _originalLink);
 
       // TODO: this will not work for aux routes with parameters or multiple segments
       auxInstructions[auxInstruction.component.urlPath] = auxInstruction;
-      linkIndex += 1;
+      linkParamIndex += 1;
     }
 
-    var componentRecognizer = this._rules.get(parentComponent);
-    if (isBlank(componentRecognizer)) {
-      throw new BaseException(
-          `Component "${getTypeNameForDebugging(parentComponent)}" has no route config.`);
-    }
+    var instruction = new ResolvedInstruction(componentInstruction, null, auxInstructions);
 
-    var routeRecognizer =
-        (_aux ? componentRecognizer.auxNames : componentRecognizer.names).get(routeName);
-
-    if (!isPresent(routeRecognizer)) {
-      throw new BaseException(
-          `Component "${getTypeNameForDebugging(parentComponent)}" has no route named "${routeName}".`);
-    }
-
-    if (!isPresent(routeRecognizer.handler.componentType)) {
-      var compInstruction = routeRecognizer.generateComponentPathValues(params);
-      return new UnresolvedInstruction(() => {
-        return routeRecognizer.handler.resolveComponentType().then(
-            (_) => { return this._generate(linkParams, ancestorComponents, _aux); });
-      }, compInstruction['urlPath'], compInstruction['urlParams']);
-    }
-
-    var componentInstruction = _aux ? componentRecognizer.generateAuxiliary(routeName, params) :
-                                      componentRecognizer.generate(routeName, params);
-
-
-    var childInstruction: Instruction = null;
-
-    var remaining = linkParams.slice(linkIndex + 1);
-
-    // the component is sync
-    if (isPresent(componentInstruction.componentType)) {
-      if (linkIndex + 1 < linkParams.length) {
-        let childAncestorComponents =
-            ancestorComponents.concat([componentInstruction.componentType]);
-        childInstruction = this._generate(remaining, childAncestorComponents);
-      } else if (!componentInstruction.terminal) {
-        // ... look for defaults
-        childInstruction = this.generateDefault(componentInstruction.componentType);
-
-        if (isBlank(childInstruction)) {
-          throw new BaseException(
-              `Link "${ListWrapper.toJSON(linkParams)}" does not resolve to a terminal instruction.`);
+    // If the component is sync, we can generate resolved child route instructions
+    // If not, we'll resolve the instructions at navigation time
+    if (isPresent(componentInstruction) && isPresent(componentInstruction.componentType)) {
+      let childInstruction: Instruction = null;
+      if (componentInstruction.terminal) {
+        if (linkParamIndex >= linkParams.length) {
+          // TODO: throw that there are extra link params beyond the terminal component
         }
+      } else {
+        let childAncestorComponents: Instruction[] = ancestorInstructions.concat([instruction]);
+        let remainingLinkParams = linkParams.slice(linkParamIndex);
+        childInstruction = this._generate(remainingLinkParams, childAncestorComponents, null, false,
+                                          _originalLink);
       }
+      instruction.child = childInstruction;
     }
 
-    return new ResolvedInstruction(componentInstruction, childInstruction, auxInstructions);
+    return instruction;
   }
 
   public hasRoute(name: string, parentComponent: any): boolean {
-    var componentRecognizer: ComponentRecognizer = this._rules.get(parentComponent);
-    if (isBlank(componentRecognizer)) {
+    var rules = this._rules.get(parentComponent);
+    if (isBlank(rules)) {
       return false;
     }
-    return componentRecognizer.hasRoute(name);
+    return rules.hasRoute(name);
   }
 
   public generateDefault(componentCursor: Type): Instruction {
@@ -353,24 +461,23 @@ export class RouteRegistry {
       return null;
     }
 
-    var componentRecognizer = this._rules.get(componentCursor);
-    if (isBlank(componentRecognizer) || isBlank(componentRecognizer.defaultRoute)) {
+    var rules = this._rules.get(componentCursor);
+    if (isBlank(rules) || isBlank(rules.defaultRule)) {
       return null;
     }
 
-
     var defaultChild = null;
-    if (isPresent(componentRecognizer.defaultRoute.handler.componentType)) {
-      var componentInstruction = componentRecognizer.defaultRoute.generate({});
-      if (!componentRecognizer.defaultRoute.terminal) {
-        defaultChild = this.generateDefault(componentRecognizer.defaultRoute.handler.componentType);
+    if (isPresent(rules.defaultRule.handler.componentType)) {
+      var componentInstruction = rules.defaultRule.generate({});
+      if (!rules.defaultRule.terminal) {
+        defaultChild = this.generateDefault(rules.defaultRule.handler.componentType);
       }
       return new DefaultInstruction(componentInstruction, defaultChild);
     }
 
     return new UnresolvedInstruction(() => {
-      return componentRecognizer.defaultRoute.handler.resolveComponentType().then(
-          () => this.generateDefault(componentCursor));
+      return rules.defaultRule.handler.resolveComponentType().then(
+          (_) => this.generateDefault(componentCursor));
     });
   }
 }
@@ -379,22 +486,57 @@ export class RouteRegistry {
  * Given: ['/a/b', {c: 2}]
  * Returns: ['', 'a', 'b', {c: 2}]
  */
-function splitAndFlattenLinkParams(linkParams: any[]): any[] {
-  return linkParams.reduce((accumulation: any[], item) => {
+function splitAndFlattenLinkParams(linkParams: any[]) {
+  var accumulation = [];
+  linkParams.forEach(function(item: any) {
     if (isString(item)) {
-      let strItem: string = item;
-      return accumulation.concat(strItem.split('/'));
+      var strItem: string = <string>item;
+      accumulation = accumulation.concat(strItem.split('/'));
+    } else {
+      accumulation.push(item);
     }
-    accumulation.push(item);
-    return accumulation;
-  }, []);
+  });
+  return accumulation;
 }
+
 
 /*
  * Given a list of instructions, returns the most specific instruction
  */
 function mostSpecific(instructions: Instruction[]): Instruction {
-  return ListWrapper.maximum(instructions, (instruction: Instruction) => instruction.specificity);
+  instructions = instructions.filter((instruction) => isPresent(instruction));
+  if (instructions.length == 0) {
+    return null;
+  }
+  if (instructions.length == 1) {
+    return instructions[0];
+  }
+  var first = instructions[0];
+  var rest = instructions.slice(1);
+  return rest.reduce((instruction: Instruction, contender: Instruction) => {
+    if (compareSpecificityStrings(contender.specificity, instruction.specificity) == -1) {
+      return contender;
+    }
+    return instruction;
+  }, first);
+}
+
+/*
+ * Expects strings to be in the form of "[0-2]+"
+ * Returns -1 if string A should be sorted above string B, 1 if it should be sorted after,
+ * or 0 if they are the same.
+ */
+function compareSpecificityStrings(a: string, b: string): number {
+  var l = Math.min(a.length, b.length);
+  for (var i = 0; i < l; i += 1) {
+    var ai = StringWrapper.charCodeAt(a, i);
+    var bi = StringWrapper.charCodeAt(b, i);
+    var difference = bi - ai;
+    if (difference != 0) {
+      return difference;
+    }
+  }
+  return a.length - b.length;
 }
 
 function assertTerminalComponent(component, path) {

@@ -1,7 +1,15 @@
-import {isPresent, isBlank, isJsObject, isType, StringWrapper} from 'angular2/src/facade/lang';
+import {
+  isPresent,
+  isBlank,
+  isJsObject,
+  isType,
+  StringWrapper,
+  Json
+} from 'angular2/src/facade/lang';
 import {BaseException, WrappedException} from 'angular2/src/facade/exceptions';
 import {
   isListLikeIterable,
+  iterateListLike,
   Map,
   MapWrapper,
   StringMapWrapper,
@@ -50,8 +58,20 @@ export class Headers {
     }
 
     // headers instanceof StringMap
-    StringMapWrapper.forEach(
-        headers, (v, k) => { this._headersMap.set(k, isListLikeIterable(v) ? v : [v]); });
+    StringMapWrapper.forEach(headers, (v: any, k: string) => {
+      this._headersMap.set(k, isListLikeIterable(v) ? v : [v]);
+    });
+  }
+
+  /**
+   * Returns a new Headers instance from the given DOMString of Response Headers
+   */
+  static fromResponseHeaderString(headersString: string): Headers {
+    return headersString.trim()
+        .split('\n')
+        .map(val => val.split(':'))
+        .map(([key, ...parts]) => ([key.trim(), parts.join(':').trim()]))
+        .reduce((headers, [key, value]) => !headers.set(key, value) && headers, new Headers());
   }
 
   /**
@@ -92,13 +112,13 @@ export class Headers {
    * Sets or overrides header value for given name.
    */
   set(header: string, value: string | string[]): void {
-    var list = [];
+    var list: string[] = [];
 
     if (isListLikeIterable(value)) {
       var pushValue = (<string[]>value).join(',');
       list.push(pushValue);
     } else {
-      list.push(value);
+      list.push(<string>value);
     }
 
     this._headersMap.set(header, list);
@@ -108,6 +128,21 @@ export class Headers {
    * Returns values of all headers.
    */
   values(): string[][] { return MapWrapper.values(this._headersMap); }
+
+  /**
+   * Returns string of all headers.
+   */
+  toJSON(): {[key: string]: any} {
+    let serializableHeaders = {};
+    this._headersMap.forEach((values: string[], name: string) => {
+      let list = [];
+
+      iterateListLike(values, val => list = ListWrapper.concat(list, val.split(',')));
+
+      serializableHeaders[name] = list;
+    });
+    return serializableHeaders;
+  }
 
   /**
    * Returns list of header values for a given name.

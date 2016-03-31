@@ -1,16 +1,18 @@
+export {AngularEntrypoint} from 'angular2/src/core/angular_entrypoint';
 export {
   BROWSER_PROVIDERS,
-  ELEMENT_PROBE_BINDINGS,
   ELEMENT_PROBE_PROVIDERS,
+  ELEMENT_PROBE_PROVIDERS_PROD_MODE,
   inspectNativeElement,
   BrowserDomAdapter,
   By,
   Title,
-  DOCUMENT
+  DOCUMENT,
+  enableDebugTools,
+  disableDebugTools
 } from 'angular2/src/platform/browser_common';
 
 import {Type, isPresent, CONST_EXPR} from 'angular2/src/facade/lang';
-import {Promise} from 'angular2/src/facade/promise';
 import {
   BROWSER_PROVIDERS,
   BROWSER_APP_COMMON_PROVIDERS
@@ -59,23 +61,7 @@ export const BROWSER_APP_PROVIDERS: Array<any /*Type | Provider | any[]*/> = CON
  *
  * We can use this script code:
  *
- * ```
- * @Component({
- *    selector: 'my-app',
- *    template: 'Hello {{ name }}!'
- * })
- * class MyApp {
- *   name:string;
- *
- *   constructor() {
- *     this.name = 'World';
- *   }
- * }
- *
- * main() {
- *   return bootstrap(MyApp);
- * }
- * ```
+ * {@example core/ts/bootstrap/bootstrap.ts region='bootstrap'}
  *
  * When the app developer invokes `bootstrap()` with the root component `MyApp` as its
  * argument, Angular performs the following tasks:

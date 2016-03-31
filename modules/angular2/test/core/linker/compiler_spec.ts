@@ -10,57 +10,41 @@ import {
   afterEach,
   AsyncTestCompleter,
   inject,
-  beforeEachBindings
+  beforeEachProviders
 } from 'angular2/testing_internal';
 
-import {Component, View, provide} from 'angular2/core';
-import {SpyProtoViewFactory} from '../spies';
-import {
-  CompiledHostTemplate,
-  CompiledComponentTemplate,
-  BeginComponentCmd
-} from 'angular2/src/core/linker/template_commands';
+import {provide} from 'angular2/core';
 import {Compiler} from 'angular2/src/core/linker/compiler';
-import {ProtoViewFactory} from 'angular2/src/core/linker/proto_view_factory';
 import {reflector, ReflectionInfo} from 'angular2/src/core/reflection/reflection';
-import {AppProtoView} from 'angular2/src/core/linker/view';
 import {Compiler_} from "angular2/src/core/linker/compiler";
+import {HostViewFactory} from 'angular2/src/core/linker/view';
+import {HostViewFactoryRef_} from 'angular2/src/core/linker/view_ref';
 
 export function main() {
   describe('Compiler', () => {
-    var compiler: Compiler;
-    var protoViewFactorySpy;
-    var someProtoView;
-    var cht: CompiledHostTemplate;
+    var someHostViewFactory;
 
-    beforeEachBindings(() => {
-      protoViewFactorySpy = new SpyProtoViewFactory();
-      someProtoView = new AppProtoView(null, null, null, null, null, null, null);
-      protoViewFactorySpy.spy('createHost').andReturn(someProtoView);
-      var factory = provide(ProtoViewFactory, {useValue: protoViewFactorySpy});
-      var classProvider = provide(Compiler, {useClass: Compiler_});
-      var providers = [factory, classProvider];
-      return providers;
-    });
+    beforeEachProviders(() => [provide(Compiler, {useClass: Compiler_})]);
 
     beforeEach(inject([Compiler], (_compiler) => {
-      compiler = _compiler;
-      cht = new CompiledHostTemplate(new CompiledComponentTemplate('aCompId', null, null, null));
-      reflector.registerType(SomeComponent, new ReflectionInfo([cht]));
+      someHostViewFactory = new HostViewFactory(null, null);
+      reflector.registerType(SomeComponent, new ReflectionInfo([someHostViewFactory]));
     }));
 
-    it('should read the template from an annotation', inject([AsyncTestCompleter], (async) => {
+    it('should read the template from an annotation',
+       inject([AsyncTestCompleter, Compiler], (async, compiler: Compiler) => {
          compiler.compileInHost(SomeComponent)
-             .then((_) => {
-               expect(protoViewFactorySpy.spy('createHost')).toHaveBeenCalledWith(cht);
+             .then((hostViewFactoryRef: HostViewFactoryRef_) => {
+               expect(hostViewFactoryRef.internalHostViewFactory).toBe(someHostViewFactory);
                async.done();
+               return null;
              });
        }));
 
-    it('should clear the cache', () => {
-      compiler.clearCache();
-      expect(protoViewFactorySpy.spy('clearCache')).toHaveBeenCalled();
-    });
+    it('should clear the cache', inject([Compiler], (compiler) => {
+         // Nothing to assert for now...
+         compiler.clearCache();
+       }));
   });
 }
 

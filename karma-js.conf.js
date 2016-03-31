@@ -1,4 +1,5 @@
 var browserProvidersConf = require('./browser-providers.conf.js');
+var internalAngularReporter = require('./tools/karma/reporter.js');
 
 // Karma configuration
 // Generated on Thu Sep 25 2014 11:52:02 GMT-0700 (PDT)
@@ -16,15 +17,14 @@ module.exports = function(config) {
       // include Angular v1 for upgrade module testing
       'node_modules/angular/angular.min.js',
 
-      // zone-microtask must be included first as it contains a Promise monkey patch
-      'node_modules/zone.js/dist/zone-microtask.js',
+      'node_modules/zone.js/dist/zone.js',
       'node_modules/zone.js/dist/long-stack-trace-zone.js',
       'node_modules/zone.js/dist/jasmine-patch.js',
 
       // Including systemjs because it defines `__eval`, which produces correct stack traces.
       'modules/angular2/src/testing/shims_for_IE.js',
       'node_modules/systemjs/dist/system.src.js',
-      {pattern: 'node_modules/@reactivex/rxjs/**', included: false, watched: false, served: true},
+      {pattern: 'node_modules/rxjs/**', included: false, watched: false, served: true},
       'node_modules/reflect-metadata/Reflect.js',
       'tools/build/file2modulename.js',
       'test-main.js',
@@ -35,6 +35,21 @@ module.exports = function(config) {
 
     customLaunchers: browserProvidersConf.customLaunchers,
 
+    plugins: [
+      'karma-jasmine',
+      'karma-browserstack-launcher',
+      'karma-sauce-launcher',
+      'karma-chrome-launcher',
+      'karma-sourcemap-loader',
+      'karma-dart',
+      internalAngularReporter
+    ],
+
+    preprocessors: {
+      '**/*.js': ['sourcemap']
+    },
+
+    reporters: ['internal-angular'],
     sauceLabs: {
       testName: 'Angular2',
       startConnect: false,
@@ -63,7 +78,7 @@ module.exports = function(config) {
 
   if (process.env.TRAVIS) {
     var buildId = 'TRAVIS #' + process.env.TRAVIS_BUILD_NUMBER + ' (' + process.env.TRAVIS_BUILD_ID + ')';
-    if (process.env.MODE === 'saucelabs') {
+    if (process.env.MODE.startsWith('saucelabs')) {
       config.sauceLabs.build = buildId;
       config.sauceLabs.tunnelIdentifier = process.env.TRAVIS_JOB_NUMBER;
 
@@ -73,7 +88,7 @@ module.exports = function(config) {
       config.transports = ['polling'];
     }
 
-    if (process.env.MODE === 'browserstack') {
+    if (process.env.MODE.startsWith('browserstack')) {
       config.browserStack.build = buildId;
       config.browserStack.tunnelIdentifier = process.env.TRAVIS_JOB_NUMBER;
     }

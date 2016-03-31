@@ -11,12 +11,11 @@ import {
   xit,
 } from 'angular2/testing_internal';
 
-import {Component, View} from 'angular2/angular2';
+import {Component} from 'angular2/core';
 import {getComponentInfo, parseFields} from 'angular2/src/upgrade/metadata';
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
 
 export function main() {
-  if (!DOM.supportsDOMEvents()) return;
   describe('upgrade metadata', () => {
     it('should extract component selector', () => {
       expect(getComponentInfo(ElementNameComponent).selector).toEqual('elementNameDashed');
@@ -68,13 +67,11 @@ export function main() {
   });
 }
 
-@Component({selector: 'element-name-dashed'})
-@View({template: ``})
+@Component({selector: 'element-name-dashed', template: ``})
 class ElementNameComponent {
 }
 
-@Component({selector: '[attr-name]'})
-@View({template: ``})
+@Component({selector: '[attr-name]', template: ``})
 class AttributeNameComponent {
 }
 

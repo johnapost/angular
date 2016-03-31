@@ -101,25 +101,11 @@ export function getDefinition(id: string): TestDefinition {
 
   } else if (ListWrapper.indexOf(_availableHostEventDefinitions, id) >= 0) {
     var eventRecords = _createHostEventRecords(id, _DirectiveUpdating.basicRecords[0]);
-    let cdDef = new ChangeDetectorDefinition(id, null, [], [], eventRecords,
-                                             [_DirectiveUpdating.basicRecords[0]], genConfig);
+    let cdDef = new ChangeDetectorDefinition(
+        id, null, [], [], eventRecords,
+        [_DirectiveUpdating.basicRecords[0], _DirectiveUpdating.basicRecords[1]], genConfig);
     testDef = new TestDefinition(id, cdDef, null);
 
-  } else if (id == "onPushObserveBinding") {
-    var records = _createBindingRecords("a");
-    let cdDef = new ChangeDetectorDefinition(id, ChangeDetectionStrategy.OnPushObserve, [], records,
-                                             [], [], genConfig);
-    testDef = new TestDefinition(id, cdDef, null);
-
-  } else if (id == "onPushObserveComponent") {
-    let cdDef = new ChangeDetectorDefinition(id, ChangeDetectionStrategy.OnPushObserve, [], [], [],
-                                             [], genConfig);
-    testDef = new TestDefinition(id, cdDef, null);
-
-  } else if (id == "onPushObserveDirective") {
-    let cdDef = new ChangeDetectorDefinition(id, ChangeDetectionStrategy.OnPushObserve, [], [], [],
-                                             [_DirectiveUpdating.recordNoCallbacks], genConfig);
-    testDef = new TestDefinition(id, cdDef, null);
   } else if (id == "updateElementProduction") {
     var genConfig = new ChangeDetectorGenConfig(false, false, true);
     var records = _createBindingRecords("name");
@@ -150,12 +136,7 @@ export function getAllDefinitions(): TestDefinition[] {
   allDefs = allDefs.concat(StringMapWrapper.keys(_DirectiveUpdating.availableDefinitions));
   allDefs = allDefs.concat(_availableEventDefinitions);
   allDefs = allDefs.concat(_availableHostEventDefinitions);
-  allDefs = allDefs.concat([
-    "onPushObserveBinding",
-    "onPushObserveComponent",
-    "onPushObserveDirective",
-    "updateElementProduction"
-  ]);
+  allDefs = allDefs.concat(["updateElementProduction"]);
   return allDefs.map(getDefinition);
 }
 
@@ -286,7 +267,9 @@ class _DirectiveUpdating {
       callAfterContentInit: true,
       callAfterContentChecked: true,
       callAfterViewInit: true,
-      callAfterViewChecked: true
+      callAfterViewChecked: true,
+      callOnDestroy: true,
+      outputs: [['eventEmitter', 'host-event']]
     }),
     new DirectiveRecord({
       directiveIndex: new DirectiveIndex(0, 1),
@@ -296,7 +279,9 @@ class _DirectiveUpdating {
       callAfterContentInit: true,
       callAfterContentChecked: true,
       callAfterViewInit: true,
-      callAfterViewChecked: true
+      callAfterViewChecked: true,
+      callOnDestroy: true,
+      outputs: [['eventEmitter', 'host-event']]
     })
   ];
 
@@ -433,6 +418,7 @@ var _availableEventDefinitions = [
   '(event)="a[0]=\$event"',
   // '(event)="\$event=1"',
   '(event)="a=a+1; a=a+1;"',
+  '(event)="true; false"',
   '(event)="false"',
   '(event)="true"',
   '(event)="true ? a = a + 1 : a = a + 1"',

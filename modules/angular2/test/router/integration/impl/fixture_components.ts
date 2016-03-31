@@ -1,4 +1,4 @@
-import {Component} from 'angular2/angular2';
+import {Component} from 'angular2/core';
 import {
   AsyncRoute,
   Route,
@@ -9,6 +9,18 @@ import {
   ROUTER_DIRECTIVES
 } from 'angular2/router';
 import {PromiseWrapper} from 'angular2/src/facade/async';
+import {isPresent} from 'angular2/src/facade/lang';
+import {
+  DynamicComponentLoader,
+  ComponentRef
+} from 'angular2/src/core/linker/dynamic_component_loader';
+import {ElementRef} from 'angular2/src/core/linker/element_ref';
+
+@Component({selector: 'goodbye-cmp', template: `{{farewell}}`})
+export class GoodbyeCmp {
+  farewell: string;
+  constructor() { this.farewell = 'goodbye'; }
+}
 
 @Component({selector: 'hello-cmp', template: `{{greeting}}`})
 export class HelloCmp {
@@ -128,4 +140,32 @@ export function asyncRouteDataCmp() {
 @Component({selector: 'redirect-to-parent-cmp', template: 'redirect-to-parent'})
 @RouteConfig([new Redirect({path: '/child-redirect', redirectTo: ['../HelloSib']})])
 export class RedirectToParentCmp {
+}
+
+
+@Component({selector: 'dynamic-loader-cmp', template: `{ <div #viewport></div> }`})
+@RouteConfig([new Route({path: '/', component: HelloCmp})])
+export class DynamicLoaderCmp {
+  private _componentRef: ComponentRef = null;
+  constructor(private _dynamicComponentLoader: DynamicComponentLoader,
+              private _elementRef: ElementRef) {}
+
+  onSomeAction(): Promise<any> {
+    if (isPresent(this._componentRef)) {
+      this._componentRef.dispose();
+      this._componentRef = null;
+    }
+    return this._dynamicComponentLoader.loadIntoLocation(DynamicallyLoadedComponent,
+                                                         this._elementRef, 'viewport')
+        .then((cmp) => { this._componentRef = cmp; });
+  }
+}
+
+
+@Component({
+  selector: 'loaded-cmp',
+  template: '<router-outlet></router-outlet>',
+  directives: [ROUTER_DIRECTIVES]
+})
+class DynamicallyLoadedComponent {
 }

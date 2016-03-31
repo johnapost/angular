@@ -1,5 +1,5 @@
-import {Component, provide} from 'angular2/angular2';
-import {bootstrap} from 'angular2/bootstrap';
+import {Component, provide} from 'angular2/core';
+import {bootstrap} from 'angular2/platform/browser';
 import {
   RouteConfig,
   Route,
@@ -9,8 +9,6 @@ import {
   LocationStrategy
 } from 'angular2/router';
 
-import {reflector} from 'angular2/src/core/reflection/reflection';
-import {ReflectionCapabilities} from 'angular2/src/core/reflection/reflection_capabilities';
 
 @Component({selector: 'hello-cmp', template: `hello`})
 class HelloCmp {
@@ -28,8 +26,8 @@ class GoodByeCmp {
     <h1>My App</h1>
     <nav>
       <a href="#/" id="hello-link">Navigate via href</a> |
-      <a [router-link]="['/GoodbyeCmp']" id="goodbye-link">Navigate with Link DSL</a>
-      <a [router-link]="['/GoodbyeCmp']" id="goodbye-link-blank" target="_blank">
+      <a [routerLink]="['/GoodbyeCmp']" id="goodbye-link">Navigate with Link DSL</a>
+      <a [routerLink]="['/GoodbyeCmp']" id="goodbye-link-blank" target="_blank">
         Navigate with Link DSL _blank target
       </a>
     </nav>
@@ -46,7 +44,6 @@ class AppCmp {
 
 
 export function main() {
-  reflector.reflectionCapabilities = new ReflectionCapabilities();
   bootstrap(AppCmp,
             [ROUTER_PROVIDERS, provide(LocationStrategy, {useClass: HashLocationStrategy})]);
 }

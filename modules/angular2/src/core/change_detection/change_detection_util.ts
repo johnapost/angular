@@ -4,10 +4,17 @@ import {
   isBlank,
   Type,
   StringWrapper,
-  looseIdentical
+  looseIdentical,
+  isPrimitive
 } from 'angular2/src/facade/lang';
 import {BaseException} from 'angular2/src/facade/exceptions';
-import {ListWrapper, MapWrapper, StringMapWrapper} from 'angular2/src/facade/collection';
+import {
+  ListWrapper,
+  MapWrapper,
+  StringMapWrapper,
+  isListLikeIterable,
+  areIterablesEqual
+} from 'angular2/src/facade/collection';
 import {ProtoRecord} from './proto_record';
 import {ChangeDetectionStrategy, isDefaultChangeDetectionStrategy} from './constants';
 import {implementsOnDestroy} from './pipe_lifecycle_reflector';
@@ -54,43 +61,20 @@ var _wrappedValues = [
 
 var _wrappedIndex = 0;
 
-
+/**
+ * Represents a basic change from a previous to a new value.
+ */
 export class SimpleChange {
   constructor(public previousValue: any, public currentValue: any) {}
 
+  /**
+   * Check whether the new value is the first value assigned.
+   */
   isFirstChange(): boolean { return this.previousValue === ChangeDetectionUtil.uninitialized; }
 }
 
-var _simpleChangesIndex = 0;
-var _simpleChanges = [
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null),
-  new SimpleChange(null, null)
-];
-
 function _simpleChange(previousValue, currentValue): SimpleChange {
-  var index = _simpleChangesIndex++ % 20;
-  var s = _simpleChanges[index];
-  s.previousValue = previousValue;
-  s.currentValue = currentValue;
-  return s;
+  return new SimpleChange(previousValue, currentValue);
 }
 
 /* tslint:disable:requireParameterType */
@@ -195,7 +179,7 @@ export class ChangeDetectionUtil {
 
   static callPipeOnDestroy(selectedPipe: SelectedPipe): void {
     if (implementsOnDestroy(selectedPipe.pipe)) {
-      (<any>selectedPipe.pipe).onDestroy();
+      (<any>selectedPipe.pipe).ngOnDestroy();
     }
   }
 
@@ -209,4 +193,17 @@ export class ChangeDetectionUtil {
   }
 
   static looseNotIdentical(a: any, b: any): boolean { return !looseIdentical(a, b); }
+
+  static devModeEqual(a: any, b: any): boolean {
+    if (isListLikeIterable(a) && isListLikeIterable(b)) {
+      return areIterablesEqual(a, b, ChangeDetectionUtil.devModeEqual);
+
+    } else if (!isListLikeIterable(a) && !isPrimitive(a) && !isListLikeIterable(b) &&
+               !isPrimitive(b)) {
+      return true;
+
+    } else {
+      return looseIdentical(a, b);
+    }
+  }
 }

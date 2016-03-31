@@ -20,21 +20,21 @@ class GenericMessageBus implements MessageBus {
         _source = source;
 
   void attachToZone(NgZone zone) {
-    sink.attachToZone(zone);
-    source.attachToZone(zone);
+    _sink.attachToZone(zone);
+    _source.attachToZone(zone);
   }
 
   void initChannel(String channel, [bool runInZone = true]) {
-    sink.initChannel(channel, runInZone);
-    source.initChannel(channel, runInZone);
+    _sink.initChannel(channel, runInZone);
+    _source.initChannel(channel, runInZone);
   }
 
   EventEmitter from(String channel) {
-    return source.from(channel);
+    return _source.from(channel);
   }
 
   EventEmitter to(String channel) {
-    return sink.to(channel);
+    return _sink.to(channel);
   }
 }
 
@@ -45,12 +45,14 @@ abstract class GenericMessageBusSink implements MessageBusSink {
 
   void attachToZone(NgZone zone) {
     _zone = zone;
-    _zone.overrideOnEventDone(() {
-      if (_messageBuffer.length > 0) {
-        sendMessages(_messageBuffer);
-        _messageBuffer.clear();
-      }
-    }, false);
+    _zone.runOutsideAngular(() {
+      _zone.onStable.listen((_) {
+        if (_messageBuffer.length > 0) {
+          sendMessages(_messageBuffer);
+          _messageBuffer.clear();
+        }
+      });
+    });
   }
 
   void initChannel(String channelName, [bool runInZone = true]) {

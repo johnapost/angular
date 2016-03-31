@@ -88,6 +88,8 @@ class NoAnnotations {
   constructor(secretDependency) {}
 }
 
+function factoryFn(a) {}
+
 export function main() {
   var dynamicProviders = [
     provide('provider0', {useValue: 1}),
@@ -109,8 +111,10 @@ export function main() {
      providers: dynamicProviders,
      strategyClass: InjectorDynamicStrategy
    }].forEach((context) => {
-    function createInjector(providers: any[]) {
-      return Injector.resolveAndCreate(providers.concat(context['providers']));
+    function createInjector(providers: any[], parent: Injector = null, isHost: boolean = false) {
+      return new Injector(ProtoInjector.fromResolvedProviders(
+                              Injector.resolve(providers.concat(context['providers']))),
+                          parent, isHost);
     }
 
     describe(`injector ${context['strategy']}`, () => {
@@ -142,10 +146,20 @@ export function main() {
         expect(car.engine).toBeAnInstanceOf(TurboEngine);
       });
 
-      it('should throw when no type and not @Inject', () => {
+      it('should throw when no type and not @Inject (class case)', () => {
         expect(() => createInjector([NoAnnotations]))
-            .toThrowError('Cannot resolve all parameters for NoAnnotations(?). ' +
-                          'Make sure they all have valid type or annotations.');
+            .toThrowError(
+                "Cannot resolve all parameters for 'NoAnnotations'(?). " +
+                'Make sure that all the parameters are decorated with Inject or have valid type annotations ' +
+                "and that 'NoAnnotations' is decorated with Injectable.");
+      });
+
+      it('should throw when no type and not @Inject (factory case)', () => {
+        expect(() => createInjector([provide("someToken", {useFactory: factoryFn})]))
+            .toThrowError(
+                "Cannot resolve all parameters for 'factoryFn'(?). " +
+                'Make sure that all the parameters are decorated with Inject or have valid type annotations ' +
+                "and that 'factoryFn' is decorated with Injectable.");
       });
 
       it('should cache instances', () => {
@@ -173,6 +187,49 @@ export function main() {
         var car = injector.get(Car);
         expect(car).toBeAnInstanceOf(SportsCar);
         expect(car.engine).toBeAnInstanceOf(Engine);
+      });
+
+      it('should throw when using a factory with more than 20 dependencies', () => {
+        function factoryWithTooManyArgs() { return new Car(null); }
+
+        var injector = createInjector([
+          Engine,
+          provide(Car,
+                  {
+                    useFactory: factoryWithTooManyArgs,
+                    deps: [
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine,
+                      Engine
+                    ]
+                  })
+        ]);
+
+        try {
+          injector.get(Car);
+          throw "Must throw";
+        } catch (e) {
+          expect(e.message)
+              .toContain(`Cannot instantiate 'Car' because it has more than 20 dependencies`);
+        }
       });
 
       it('should supporting provider to null', () => {
@@ -305,7 +362,7 @@ export function main() {
           new ProviderWithVisibility(providers[0], Visibility.Public),
           new ProviderWithVisibility(providers[1], Visibility.Public)
         ]);
-        var injector = new Injector(proto, null, null);
+        var injector = new Injector(proto);
 
         try {
           injector.get(Car);
@@ -327,8 +384,8 @@ export function main() {
         var protoChild =
             new ProtoInjector([new ProviderWithVisibility(carProvider, Visibility.Public)]);
 
-        var parent = new Injector(protoParent, null, null, () => "parentContext");
-        var child = new Injector(protoChild, parent, null, () => "childContext");
+        var parent = new Injector(protoParent, null, false, null, () => "parentContext");
+        var child = new Injector(protoChild, parent, false, null, () => "childContext");
 
         try {
           child.get(Car);
@@ -367,7 +424,7 @@ export function main() {
         var providers = Injector.resolve([Car]);
         var proto =
             new ProtoInjector([new ProviderWithVisibility(providers[0], Visibility.Public)]);
-        var injector = new Injector(proto, null, depProvider);
+        var injector = new Injector(proto, null, false, depProvider);
 
         expect(injector.get(Car).engine).toEqual(e);
         expect(depProvider.spy("getDependency"))
@@ -477,11 +534,9 @@ export function main() {
               new ProtoInjector([new ProviderWithVisibility(engine, Visibility.Private)]);
           var parent = new Injector(protoParent);
 
-          var child = Injector.resolveAndCreate([
-            provide(Car, {useFactory: (e) => new Car(e), deps: [[Engine, new HostMetadata()]]})
-          ]);
-
-          child.internalStrategy.attach(parent, true);  // host
+          var child = createInjector(
+              [provide(Car, {useFactory: (e) => new Car(e), deps: [[Engine, new HostMetadata()]]})],
+              parent, true);  // host
 
           expect(child.get(Car)).toBeAnInstanceOf(Car);
         });
@@ -492,11 +547,9 @@ export function main() {
               new ProtoInjector([new ProviderWithVisibility(engine, Visibility.Public)]);
           var parent = new Injector(protoParent);
 
-          var child = Injector.resolveAndCreate([
-            provide(Car, {useFactory: (e) => new Car(e), deps: [[Engine, new HostMetadata()]]})
-          ]);
-
-          child.internalStrategy.attach(parent, true);  // host
+          var child = createInjector(
+              [provide(Car, {useFactory: (e) => new Car(e), deps: [[Engine, new HostMetadata()]]})],
+              parent, true);  // host
 
           expect(() => child.get(Car))
               .toThrowError(`No provider for Engine! (${stringify(Car)} -> ${stringify(Engine)})`);
@@ -520,12 +573,13 @@ export function main() {
               new ProtoInjector([new ProviderWithVisibility(engine, Visibility.Private)]);
           var parent = new Injector(protoParent);
 
-          var child = Injector.resolveAndCreate([
-            provide(Engine, {useClass: BrokenEngine}),
-            provide(Car,
-                    {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
-          ]);
-          child.internalStrategy.attach(parent, true);  // boundary
+          var child = createInjector(
+              [
+                provide(Engine, {useClass: BrokenEngine}),
+                provide(Car,
+                        {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
+              ],
+              parent, true);  // boundary
 
           expect(child.get(Car)).toBeAnInstanceOf(Car);
         });
@@ -536,12 +590,13 @@ export function main() {
               new ProtoInjector([new ProviderWithVisibility(engine, Visibility.Public)]);
           var parent = new Injector(protoParent);
 
-          var child = Injector.resolveAndCreate([
-            provide(Engine, {useClass: BrokenEngine}),
-            provide(Car,
-                    {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
-          ]);
-          child.internalStrategy.attach(parent, true);  // boundary
+          var child = createInjector(
+              [
+                provide(Engine, {useClass: BrokenEngine}),
+                provide(Car,
+                        {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
+              ],
+              parent, true);  // boundary
 
           expect(child.get(Car)).toBeAnInstanceOf(Car);
         });
@@ -552,12 +607,13 @@ export function main() {
               new ProtoInjector([new ProviderWithVisibility(engine, Visibility.Private)]);
           var parent = new Injector(protoParent);
 
-          var child = Injector.resolveAndCreate([
-            provide(Engine, {useClass: BrokenEngine}),
-            provide(Car,
-                    {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
-          ]);
-          child.internalStrategy.attach(parent, false);
+          var child = createInjector(
+              [
+                provide(Engine, {useClass: BrokenEngine}),
+                provide(Car,
+                        {useFactory: (e) => new Car(e), deps: [[Engine, new SkipSelfMetadata()]]})
+              ],
+              parent, false);
 
           expect(() => child.get(Car))
               .toThrowError(`No provider for Engine! (${stringify(Car)} -> ${stringify(Engine)})`);

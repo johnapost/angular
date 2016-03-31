@@ -153,7 +153,6 @@ export const $BAR = 124;
 export const $RBRACE = 125;
 const $NBSP = 160;
 
-
 export class ScannerError extends BaseException {
   constructor(public message) { super(); }
 
@@ -248,15 +247,12 @@ class _Scanner {
   }
 
   scanCharacter(start: number, code: number): Token {
-    assert(this.peek == code);
     this.advance();
     return newCharacterToken(start, code);
   }
 
 
   scanOperator(start: number, str: string): Token {
-    assert(this.peek == StringWrapper.charCodeAt(str, 0));
-    assert(SetWrapper.has(OPERATORS, str));
     this.advance();
     return newOperatorToken(start, str);
   }
@@ -274,7 +270,6 @@ class _Scanner {
    */
   scanComplexOperator(start: number, one: string, twoCode: number, two: string, threeCode?: number,
                       three?: string): Token {
-    assert(this.peek == StringWrapper.charCodeAt(one, 0));
     this.advance();
     var str: string = one;
     if (this.peek == twoCode) {
@@ -285,12 +280,10 @@ class _Scanner {
       this.advance();
       str += three;
     }
-    assert(SetWrapper.has(OPERATORS, str));
     return newOperatorToken(start, str);
   }
 
   scanIdentifier(): Token {
-    assert(isIdentifierStart(this.peek));
     var start: number = this.index;
     this.advance();
     while (isIdentifierPart(this.peek)) this.advance();
@@ -303,7 +296,6 @@ class _Scanner {
   }
 
   scanNumber(start: number): Token {
-    assert(isDigit(this.peek));
     var simple: boolean = (this.index === start);
     this.advance();  // Skip initial digit.
     while (true) {
@@ -329,7 +321,6 @@ class _Scanner {
   }
 
   scanString(): Token {
-    assert(this.peek == $SQ || this.peek == $DQ);
     var start: number = this.index;
     var quote: number = this.peek;
     this.advance();  // Skip initial quote.
@@ -393,6 +384,18 @@ function isWhitespace(code: number): boolean {
 
 function isIdentifierStart(code: number): boolean {
   return ($a <= code && code <= $z) || ($A <= code && code <= $Z) || (code == $_) || (code == $$);
+}
+
+export function isIdentifier(input: string): boolean {
+  if (input.length == 0) return false;
+  var scanner = new _Scanner(input);
+  if (!isIdentifierStart(scanner.peek)) return false;
+  scanner.advance();
+  while (scanner.peek !== $EOF) {
+    if (!isIdentifierPart(scanner.peek)) return false;
+    scanner.advance();
+  }
+  return true;
 }
 
 function isIdentifierPart(code: number): boolean {

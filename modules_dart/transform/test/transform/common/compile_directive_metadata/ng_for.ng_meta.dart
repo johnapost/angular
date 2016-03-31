@@ -4,9 +4,10 @@ final ngFor = {
   "NgFor": {
     "kind": "type",
     "value": {
+      "class": "Directive",
       "isComponent": false,
       "dynamicLoadable": true,
-      "selector": "[ng-for][ng-for-of]",
+      "selector": "[ngFor][ngForOf]",
       "exportAs": null,
       "type": {
         "id": 9999,

@@ -8,7 +8,7 @@ import {
   expect,
   iit,
   inject,
-  beforeEachBindings,
+  beforeEachProviders,
   it,
   xit,
   TestComponentBuilder
@@ -16,43 +16,47 @@ import {
 
 import {Injectable, provide} from 'angular2/core';
 import {NgIf} from 'angular2/common';
-import {Directive, Component, View, ViewMetadata} from 'angular2/src/core/metadata';
+import {Directive, Component, ViewMetadata} from 'angular2/src/core/metadata';
 
-@Component({selector: 'child-comp'})
-@View({template: `<span>Original {{childBinding}}</span>`, directives: []})
+@Component(
+    {selector: 'child-comp', template: `<span>Original {{childBinding}}</span>`, directives: []})
 @Injectable()
 class ChildComp {
   childBinding: string;
   constructor() { this.childBinding = 'Child'; }
 }
 
-@Component({selector: 'child-comp'})
-@View({template: `<span>Mock</span>`})
+@Component({selector: 'child-comp', template: `<span>Mock</span>`})
 @Injectable()
 class MockChildComp {
 }
 
-@Component({selector: 'parent-comp'})
-@View({template: `Parent(<child-comp></child-comp>)`, directives: [ChildComp]})
+@Component({
+  selector: 'parent-comp',
+  template: `Parent(<child-comp></child-comp>)`,
+  directives: [ChildComp]
+})
 @Injectable()
 class ParentComp {
 }
 
-@Component({selector: 'my-if-comp'})
-@View({template: `MyIf(<span *ng-if="showMore">More</span>)`, directives: [NgIf]})
+@Component({
+  selector: 'my-if-comp',
+  template: `MyIf(<span *ngIf="showMore">More</span>)`,
+  directives: [NgIf]
+})
 @Injectable()
 class MyIfComp {
   showMore: boolean = false;
 }
 
-@Component({selector: 'child-child-comp'})
-@View({template: `<span>ChildChild</span>`})
+@Component({selector: 'child-child-comp', template: `<span>ChildChild</span>`})
 @Injectable()
 class ChildChildComp {
 }
 
-@Component({selector: 'child-comp'})
-@View({
+@Component({
+  selector: 'child-comp',
   template: `<span>Original {{childBinding}}(<child-child-comp></child-child-comp>)</span>`,
   directives: [ChildChildComp]
 })
@@ -62,8 +66,7 @@ class ChildWithChildComp {
   constructor() { this.childBinding = 'Child'; }
 }
 
-@Component({selector: 'child-child-comp'})
-@View({template: `<span>ChildChild Mock</span>`})
+@Component({selector: 'child-child-comp', template: `<span>ChildChild Mock</span>`})
 @Injectable()
 class MockChildChildComp {
 }
@@ -78,14 +81,20 @@ class MockFancyService extends FancyService {
   value: string = 'mocked out value';
 }
 
-@Component({selector: 'my-service-comp', bindings: [FancyService]})
-@View({template: `injected value: {{fancyService.value}}`})
+@Component({
+  selector: 'my-service-comp',
+  bindings: [FancyService],
+  template: `injected value: {{fancyService.value}}`
+})
 class TestBindingsComp {
   constructor(private fancyService: FancyService) {}
 }
 
-@Component({selector: 'my-service-comp', viewProviders: [FancyService]})
-@View({template: `injected value: {{fancyService.value}}`})
+@Component({
+  selector: 'my-service-comp',
+  viewProviders: [FancyService],
+  template: `injected value: {{fancyService.value}}`
+})
 class TestViewBindingsComp {
   constructor(private fancyService: FancyService) {}
 }
@@ -99,7 +108,7 @@ export function main() {
          tcb.createAsync(ChildComp).then((componentFixture) => {
            componentFixture.detectChanges();
 
-           expect(componentFixture.debugElement.nativeElement).toHaveText('Original Child');
+           expect(componentFixture.nativeElement).toHaveText('Original Child');
            async.done();
          });
        }));
@@ -109,11 +118,11 @@ export function main() {
 
          tcb.createAsync(MyIfComp).then((componentFixture) => {
            componentFixture.detectChanges();
-           expect(componentFixture.debugElement.nativeElement).toHaveText('MyIf()');
+           expect(componentFixture.nativeElement).toHaveText('MyIf()');
 
-           componentFixture.debugElement.componentInstance.showMore = true;
+           componentFixture.componentInstance.showMore = true;
            componentFixture.detectChanges();
-           expect(componentFixture.debugElement.nativeElement).toHaveText('MyIf(More)');
+           expect(componentFixture.nativeElement).toHaveText('MyIf(More)');
 
            async.done();
          });
@@ -126,7 +135,7 @@ export function main() {
              .createAsync(MockChildComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement).toHaveText('Mock');
+               expect(componentFixture.nativeElement).toHaveText('Mock');
 
                async.done();
              });
@@ -140,7 +149,7 @@ export function main() {
              .createAsync(ChildComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement).toHaveText('Modified Child');
+               expect(componentFixture.nativeElement).toHaveText('Modified Child');
 
                async.done();
              });
@@ -153,7 +162,7 @@ export function main() {
              .createAsync(ParentComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement).toHaveText('Parent(Mock)');
+               expect(componentFixture.nativeElement).toHaveText('Parent(Mock)');
 
                async.done();
              });
@@ -168,7 +177,7 @@ export function main() {
              .createAsync(ParentComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement)
+               expect(componentFixture.nativeElement)
                    .toHaveText('Parent(Original Child(ChildChild Mock))');
 
                async.done();
@@ -183,7 +192,7 @@ export function main() {
              .createAsync(TestBindingsComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement)
+               expect(componentFixture.nativeElement)
                    .toHaveText('injected value: mocked out value');
                async.done();
              });
@@ -198,7 +207,7 @@ export function main() {
              .createAsync(TestViewBindingsComp)
              .then((componentFixture) => {
                componentFixture.detectChanges();
-               expect(componentFixture.debugElement.nativeElement)
+               expect(componentFixture.nativeElement)
                    .toHaveText('injected value: mocked out value');
                async.done();
              });

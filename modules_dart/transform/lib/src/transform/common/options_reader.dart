@@ -4,21 +4,18 @@ import 'package:barback/barback.dart';
 import 'annotation_matcher.dart';
 import 'mirror_mode.dart';
 import 'options.dart';
+import './url_resolver.dart';
 
-TransformerOptions parseBarbackSettings(BarbackSettings settings) {
+  TransformerOptions parseBarbackSettings(BarbackSettings settings) {
   var config = settings.configuration;
-  _warnDeprecated(config);
   var entryPoints = _readStringList(config, ENTRY_POINT_PARAM);
   var initReflector =
       _readBool(config, INIT_REFLECTOR_PARAM, defaultValue: true);
   var reflectPropertiesAsAttributes =
       _readBool(config, REFLECT_PROPERTIES_AS_ATTRIBUTES, defaultValue: false);
-  if (!config.containsKey(REFLECT_PROPERTIES_AS_ATTRIBUTES)) {
-    reflectPropertiesAsAttributes = _readBool(
-        config, REFLECT_PROPERTIES_AS_ATTRIBUTES_OLD,
-        defaultValue: false);
-  }
   var platformDirectives = _readStringList(config, PLATFORM_DIRECTIVES);
+  var platformPipes = _readStringList(config, PLATFORM_PIPES);
+  var resolvedIdentifiers = config[RESOLVED_IDENTIFIERS];
   var formatCode = _readBool(config, FORMAT_CODE_PARAM, defaultValue: false);
   String mirrorModeVal =
       config.containsKey(MIRROR_MODE_PARAM) ? config[MIRROR_MODE_PARAM] : '';
@@ -38,12 +35,16 @@ TransformerOptions parseBarbackSettings(BarbackSettings settings) {
       modeName: settings.mode.name,
       mirrorMode: mirrorMode,
       initReflector: initReflector,
+      genChangeDetectionDebugInfo: settings.mode == BarbackMode.DEBUG,
       customAnnotationDescriptors: _readCustomAnnotations(config),
       reflectPropertiesAsAttributes: reflectPropertiesAsAttributes,
       platformDirectives: platformDirectives,
+      platformPipes: platformPipes,
+      resolvedIdentifiers: resolvedIdentifiers,
       inlineViews: _readBool(config, INLINE_VIEWS_PARAM, defaultValue: false),
       lazyTransformers:
           _readBool(config, LAZY_TRANSFORMERS, defaultValue: false),
+      translations: _readAssetId(config, TRANSLATIONS),
       formatCode: formatCode);
 }
 
@@ -51,6 +52,14 @@ bool _readBool(Map config, String paramName, {bool defaultValue}) {
   return config.containsKey(paramName)
       ? config[paramName] != false
       : defaultValue;
+}
+
+AssetId _readAssetId(Map config, String paramName) {
+  if (config.containsKey(paramName)) {
+    return fromUri(config[paramName]);
+  } else {
+    return null;
+  }
 }
 
 /// Cribbed from the polymer project.
@@ -120,11 +129,3 @@ const CUSTOM_ANNOTATIONS_ERROR = '''
         - name: ...
           import: ...
           superClass: ...''';
-
-void _warnDeprecated(Map config) {
-  if (config.containsKey(REFLECT_PROPERTIES_AS_ATTRIBUTES_OLD)) {
-    print('${REFLECT_PROPERTIES_AS_ATTRIBUTES_OLD} has been renamed to '
-        '${REFLECT_PROPERTIES_AS_ATTRIBUTES}. Please update it in your '
-        'pubspec.');
-  }
-}

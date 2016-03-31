@@ -7,7 +7,8 @@ import {
   Host,
   SkipSelf,
   forwardRef,
-  Provider
+  Provider,
+  Self
 } from 'angular2/core';
 import {CONST_EXPR} from 'angular2/src/facade/lang';
 
@@ -15,7 +16,8 @@ import {ControlContainer} from './control_container';
 import {controlPath, composeValidators, composeAsyncValidators} from './shared';
 import {ControlGroup} from '../model';
 import {Form} from './form_interface';
-import {Validators, NG_VALIDATORS, NG_ASYNC_VALIDATORS} from '../validators';
+import {NG_VALIDATORS, NG_ASYNC_VALIDATORS} from '../validators';
+import {AsyncValidatorFn, ValidatorFn} from './validators';
 
 const controlGroupProvider =
     CONST_EXPR(new Provider(ControlContainer, {useExisting: forwardRef(() => NgControlGroup)}));
@@ -31,23 +33,21 @@ const controlGroupProvider =
  * @Component({
  *   selector: 'my-app',
  *   directives: [FORM_DIRECTIVES],
- * })
- * @View({
  *   template: `
  *     <div>
  *       <h2>Angular2 Control &amp; ControlGroup Example</h2>
- *       <form #f="form">
- *         <div ng-control-group="name" #cg-name="form">
+ *       <form #f="ngForm">
+ *         <div ngControlGroup="name" #cg-name="form">
  *           <h3>Enter your name:</h3>
- *           <p>First: <input ng-control="first" required></p>
- *           <p>Middle: <input ng-control="middle"></p>
- *           <p>Last: <input ng-control="last" required></p>
+ *           <p>First: <input ngControl="first" required></p>
+ *           <p>Middle: <input ngControl="middle"></p>
+ *           <p>Last: <input ngControl="last" required></p>
  *         </div>
  *         <h3>Name value:</h3>
  *         <pre>{{valueOf(cgName)}}</pre>
  *         <p>Name is {{cgName?.control?.valid ? "valid" : "invalid"}}</p>
  *         <h3>What's your favorite food?</h3>
- *         <p><input ng-control="food"></p>
+ *         <p><input ngControl="food"></p>
  *         <h3>Form value</h3>
  *         <pre>{{valueOf(f)}}</pre>
  *       </form>
@@ -69,10 +69,10 @@ const controlGroupProvider =
  * this group can be accessed separately from the overall form.
  */
 @Directive({
-  selector: '[ng-control-group]',
+  selector: '[ngControlGroup]',
   providers: [controlGroupProvider],
-  inputs: ['name: ng-control-group'],
-  exportAs: 'form'
+  inputs: ['name: ngControlGroup'],
+  exportAs: 'ngForm'
 })
 export class NgControlGroup extends ControlContainer implements OnInit,
     OnDestroy {
@@ -80,15 +80,15 @@ export class NgControlGroup extends ControlContainer implements OnInit,
   _parent: ControlContainer;
 
   constructor(@Host() @SkipSelf() parent: ControlContainer,
-              @Optional() @Inject(NG_VALIDATORS) private _validators: any[],
-              @Optional() @Inject(NG_ASYNC_VALIDATORS) private _asyncValidators: any[]) {
+              @Optional() @Self() @Inject(NG_VALIDATORS) private _validators: any[],
+              @Optional() @Self() @Inject(NG_ASYNC_VALIDATORS) private _asyncValidators: any[]) {
     super();
     this._parent = parent;
   }
 
-  onInit(): void { this.formDirective.addControlGroup(this); }
+  ngOnInit(): void { this.formDirective.addControlGroup(this); }
 
-  onDestroy(): void { this.formDirective.removeControlGroup(this); }
+  ngOnDestroy(): void { this.formDirective.removeControlGroup(this); }
 
   /**
    * Get the {@link ControlGroup} backing this binding.
@@ -105,7 +105,7 @@ export class NgControlGroup extends ControlContainer implements OnInit,
    */
   get formDirective(): Form { return this._parent.formDirective; }
 
-  get validator(): Function { return composeValidators(this._validators); }
+  get validator(): ValidatorFn { return composeValidators(this._validators); }
 
-  get asyncValidator(): Function { return composeAsyncValidators(this._asyncValidators); }
+  get asyncValidator(): AsyncValidatorFn { return composeAsyncValidators(this._asyncValidators); }
 }

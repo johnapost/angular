@@ -1,15 +1,17 @@
 library angular2.examples.message_broker.index;
 
-import "package:angular2/web_worker/ui.dart";
-import "package:angular2/src/core/reflection/reflection_capabilities.dart";
-import "package:angular2/src/core/reflection/reflection.dart";
+import "package:angular2/platform/worker_render.dart";
+import "package:angular2/core.dart";
 import "dart:html";
 
+@AngularEntrypoint()
 main() {
-  reflector.reflectionCapabilities = new ReflectionCapabilities();
   const ECHO_CHANNEL = "ECHO";
-  bootstrap("background_index.dart").then((instance) {
-    var broker = instance.app.createClientMessageBroker(ECHO_CHANNEL, false);
+  platform([WORKER_RENDER_PLATFORM])
+      .asyncApplication(initIsolate("background_index.dart"))
+      .then((ref) {
+    var brokerFactory = ref.injector.get(ClientMessageBrokerFactory);
+    var broker = brokerFactory.createMessageBroker(ECHO_CHANNEL, false);
     querySelector("#send_echo").addEventListener("click", (e) {
       var val = (querySelector("#echo_input") as InputElement).value;
       var args = new UiArguments("echo", [new FnArg(val, PRIMITIVE)]);

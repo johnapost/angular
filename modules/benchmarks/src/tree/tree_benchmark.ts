@@ -1,9 +1,8 @@
-import {bootstrap} from 'angular2/bootstrap';
+import {bootstrap} from 'angular2/platform/browser';
 import {
   Compiler,
   Component,
   Directive,
-  View,
   ViewContainerRef,
   bind,
   provide,
@@ -23,11 +22,9 @@ import {
   windowProfileEnd
 } from 'angular2/src/testing/benchmark_util';
 import {BrowserDomAdapter} from 'angular2/src/platform/browser/browser_adapter';
-import {APP_VIEW_POOL_CAPACITY} from 'angular2/src/core/linker/view_pool';
 
 function createProviders(): Provider[] {
-  var viewCacheCapacity = getStringParameter('viewcache') == 'true' ? 10000 : 1;
-  return [provide(APP_VIEW_POOL_CAPACITY, {useValue: viewCacheCapacity})];
+  return [];
 }
 
 var BASELINE_TREE_TEMPLATE;
@@ -219,18 +216,19 @@ class BaseLineIf {
   }
 }
 
-@Component({selector: 'tree', inputs: ['data']})
-@View({
+@Component({
+  selector: 'tree',
+  inputs: ['data'],
   directives: [TreeComponent, NgIf],
   template:
-      `<span> {{data.value}} <span template='ng-if data.right != null'><tree [data]='data.right'></tree></span><span template='ng-if data.left != null'><tree [data]='data.left'></tree></span></span>`
+      `<span> {{data.value}} <span template='ngIf data.right != null'><tree [data]='data.right'></tree></span><span template='ngIf data.left != null'><tree [data]='data.left'></tree></span></span>`
 })
 class TreeComponent {
   data: TreeNode;
 }
 
-@Component({selector: 'app'})
-@View({directives: [TreeComponent], template: `<tree [data]='initData'></tree>`})
+@Component(
+    {selector: 'app', directives: [TreeComponent], template: `<tree [data]='initData'></tree>`})
 class AppComponent {
   initData: TreeNode;
   constructor() {

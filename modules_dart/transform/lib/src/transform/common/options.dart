@@ -4,18 +4,20 @@ import 'package:glob/glob.dart';
 
 import 'annotation_matcher.dart';
 import 'mirror_mode.dart';
+import 'package:barback/src/asset/asset_id.dart';
 
 const CUSTOM_ANNOTATIONS_PARAM = 'custom_annotations';
 const ENTRY_POINT_PARAM = 'entry_points';
 const FORMAT_CODE_PARAM = 'format_code';
 const REFLECT_PROPERTIES_AS_ATTRIBUTES = 'reflect_properties_as_attributes';
-// TODO(kegluenq): Remove this after 30 Nov (i/5108).
-const REFLECT_PROPERTIES_AS_ATTRIBUTES_OLD = 'reflectPropertiesAsAttributes';
 const PLATFORM_DIRECTIVES = 'platform_directives';
+const PLATFORM_PIPES = 'platform_pipes';
+const RESOLVED_IDENTIFIERS = 'resolved_identifiers';
 const INIT_REFLECTOR_PARAM = 'init_reflector';
 const INLINE_VIEWS_PARAM = 'inline_views';
 const MIRROR_MODE_PARAM = 'mirror_mode';
 const LAZY_TRANSFORMERS = 'lazy_transformers';
+const TRANSLATIONS = 'translations';
 
 /// Provides information necessary to transform an Angular2 app.
 class TransformerOptions {
@@ -41,9 +43,22 @@ class TransformerOptions {
   /// as attributes on DOM elements, which may aid in application debugging.
   final bool reflectPropertiesAsAttributes;
 
+  /// Whether to generate debug information in change detectors.
+  /// This improves error messages when exception are triggered in templates.
+  final bool genChangeDetectionDebugInfo;
+
   /// A set of directives that will be automatically passed-in to the template compiler
-  /// Format of an item in the list: angular2/lib/src/common/directives.dart#CORE_DIRECTIVES
+  /// Format of an item in the list:
+  /// angular2/lib/src/common/common_directives.dart#COMMON_DIRECTIVES
   final List<String> platformDirectives;
+
+  /// A set of pipes that will be automatically passed-in to the template compiler
+  /// Format of an item in the list:
+  /// angular2/lib/src/common/pipes.dart#COMMON_PIPES
+  final List<String> platformPipes;
+
+  /// A map of identifier/asset pairs used when resolving identifiers.
+  final Map<String, String> resolvedIdentifiers;
 
   /// Whether to format generated code.
   /// Code that is only modified will never be formatted because doing so may
@@ -64,6 +79,20 @@ class TransformerOptions {
   /// at any time.
   final bool lazyTransformers;
 
+  /// Whether to generate compiled templates.
+  ///
+  /// This option is strictly for internal testing and is not available as an
+  /// option on the transformer.
+  /// Setting this to `false` means that our generated .template.dart files do
+  /// not have any compiled templates or change detectors defined in them.
+  /// These files will not be usable, but this allows us to test the code output
+  /// of the transformer without breaking when compiled template internals
+  /// change.
+  final bool genCompiledTemplates;
+
+  /// The path to the file with translations.
+  final AssetId translations;
+
   TransformerOptions._internal(
       this.entryPoints,
       this.entryPointGlobs,
@@ -71,11 +100,16 @@ class TransformerOptions {
       this.mirrorMode,
       this.initReflector,
       this.annotationMatcher,
-      {this.reflectPropertiesAsAttributes,
-      this.platformDirectives,
+      {this.formatCode,
+      this.genChangeDetectionDebugInfo,
+      this.genCompiledTemplates,
       this.inlineViews,
       this.lazyTransformers,
-      this.formatCode});
+      this.platformDirectives,
+      this.platformPipes,
+      this.resolvedIdentifiers,
+      this.translations,
+      this.reflectPropertiesAsAttributes});
 
   factory TransformerOptions(List<String> entryPoints,
       {String modeName: 'release',
@@ -83,9 +117,14 @@ class TransformerOptions {
       bool initReflector: true,
       List<ClassDescriptor> customAnnotationDescriptors: const [],
       bool inlineViews: false,
-      bool reflectPropertiesAsAttributes: true,
+      bool genChangeDetectionDebugInfo: false,
+      bool genCompiledTemplates: true,
+      bool reflectPropertiesAsAttributes: false,
       List<String> platformDirectives,
+      List<String> platformPipes,
+      Map<String, String> resolvedIdentifiers,
       bool lazyTransformers: false,
+      AssetId translations: null,
       bool formatCode: false}) {
     var annotationMatcher = new AnnotationMatcher()
       ..addAll(customAnnotationDescriptors);
@@ -94,10 +133,15 @@ class TransformerOptions {
         : null;
     return new TransformerOptions._internal(entryPoints, entryPointGlobs,
         modeName, mirrorMode, initReflector, annotationMatcher,
+        genChangeDetectionDebugInfo: genChangeDetectionDebugInfo,
+        genCompiledTemplates: genCompiledTemplates,
         reflectPropertiesAsAttributes: reflectPropertiesAsAttributes,
         platformDirectives: platformDirectives,
+        platformPipes: platformPipes,
+        resolvedIdentifiers: resolvedIdentifiers,
         inlineViews: inlineViews,
         lazyTransformers: lazyTransformers,
+        translations: translations,
         formatCode: formatCode);
   }
 }

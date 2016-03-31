@@ -4,6 +4,7 @@ import 'dart:html';
 import 'package:angular2/platform/common_dom.dart' show setRootDomAdapter;
 import 'generic_browser_adapter.dart' show GenericBrowserDomAdapter;
 import 'package:angular2/src/facade/browser.dart';
+import 'package:angular2/src/facade/lang.dart' show isBlank, isPresent;
 import 'dart:js' as js;
 
 // WARNING: Do not expose outside this class. Parsing HTML using this
@@ -220,7 +221,7 @@ class BrowserDomAdapter extends GenericBrowserDomAdapter {
       _supportsTemplateElement ? el.content : el;
   Node firstChild(el) => el.firstChild;
   Node nextSibling(Node el) => el.nextNode;
-  Element parentElement(Node el) => el.parent;
+  Element parentElement(Node el) => el.parentNode;
   List<Node> childNodes(Node el) => el.childNodes;
   List childNodesAsList(Node el) => childNodes(el).toList();
   void clearNodes(Node el) {
@@ -320,27 +321,32 @@ class BrowserDomAdapter extends GenericBrowserDomAdapter {
   List<Node> getElementsByTagName(Element element, String name) =>
       element.querySelectorAll(name);
   List<String> classList(Element element) => element.classes.toList();
-  void addClass(Element element, String classname) {
-    element.classes.add(classname);
+  void addClass(Element element, String className) {
+    element.classes.add(className);
   }
 
-  void removeClass(Element element, String classname) {
-    element.classes.remove(classname);
+  void removeClass(Element element, String className) {
+    element.classes.remove(className);
   }
 
-  bool hasClass(Element element, String classname) =>
-      element.classes.contains(classname);
+  bool hasClass(Element element, String className) =>
+      element.classes.contains(className);
 
-  void setStyle(Element element, String stylename, String stylevalue) {
-    element.style.setProperty(stylename, stylevalue);
+  void setStyle(Element element, String styleName, String styleValue) {
+    element.style.setProperty(styleName, styleValue);
   }
 
-  void removeStyle(Element element, String stylename) {
-    element.style.removeProperty(stylename);
+  bool hasStyle(Element element, String styleName, [String styleValue]) {
+    var value = this.getStyle(element, styleName);
+    return isPresent(styleValue) ? value == styleValue : value.length > 0;
   }
 
-  String getStyle(Element element, String stylename) {
-    return element.style.getPropertyValue(stylename);
+  void removeStyle(Element element, String styleName) {
+    element.style.removeProperty(styleName);
+  }
+
+  String getStyle(Element element, String styleName) {
+    return element.style.getPropertyValue(styleName);
   }
 
   String tagName(Element element) => element.tagName;
@@ -359,8 +365,14 @@ class BrowserDomAdapter extends GenericBrowserDomAdapter {
   bool hasAttribute(Element element, String attribute) =>
       element.attributes.containsKey(attribute);
 
+  bool hasAttributeNS(Element element, String ns, String attribute) =>
+      element.getAttributeNS(ns, attribute) != null;
+
   String getAttribute(Element element, String attribute) =>
       element.getAttribute(attribute);
+
+  String getAttributeNS(Element element, String ns, String attribute) =>
+      element.getAttributeNS(ns, attribute);
 
   void setAttribute(Element element, String name, String value) {
     element.setAttribute(name, value);
@@ -374,6 +386,10 @@ class BrowserDomAdapter extends GenericBrowserDomAdapter {
     //there is no removeAttribute method as of now in Dart:
     //https://code.google.com/p/dart/issues/detail?id=19934
     element.attributes.remove(name);
+  }
+
+  void removeAttributeNS(Element element, String ns, String name) {
+    element.getNamespacedAttributes(ns).remove(name);
   }
 
   Node templateAwareRoot(Element el) => el is TemplateElement ? el.content : el;
